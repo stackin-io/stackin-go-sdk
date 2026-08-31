@@ -137,7 +137,7 @@ func (e *InvoiceError) Error() string {
 }
 
 func (inv *Invoice) request(method, path string, payload any, params url.Values) (map[string]any, error) {
-	reqURL := inv.BaseURL + "/api/v1/sdk" + path
+	reqURL := inv.BaseURL + "/api/v1" + path
 	if len(params) > 0 {
 		reqURL += "?" + params.Encode()
 	}
