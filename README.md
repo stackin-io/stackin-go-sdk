@@ -5,7 +5,10 @@
 **Integrate once. Issue everywhere.**
 
 [![Go](https://img.shields.io/badge/go-1.21%2B-blue?style=flat-square)](go.mod)
+[![Go Reference](https://pkg.go.dev/badge/github.com/stackin-io/stackin-go-sdk.svg)](https://pkg.go.dev/github.com/stackin-io/stackin-go-sdk)
 [![License](https://img.shields.io/badge/license-MIT-informational?style=flat-square)](https://github.com/stackin-io/stackin-go-sdk)
+
+[API Reference](https://docs.stackin.io) · [Go SDK guide](https://docs.stackin.io/blog/go-sdk)
 
 </div>
 
@@ -25,7 +28,7 @@ go get github.com/stackin-io/stackin-go-sdk
 
 ## Usage
 
-Get an `api_key` from the [stackin dashboard](https://app.stackin.io) — select the issuing company, then Settings → API key. One key per issuing company, shown once at creation. The API resolves the issuer (CNPJ, state, address, certificate, environment) entirely from it; nothing about the issuer is ever passed on a call.
+Get an `api_key` from the [stackin dashboard](https://app.stackin.io) — select the issuing company, then Settings → API key (context `sdk`). One key per issuing company, shown once at creation. The API resolves the issuer (CNPJ, state, address, certificate, environment) entirely from it; nothing about the issuer is ever passed on a call.
 
 ```go
 package main
@@ -79,18 +82,4 @@ Building the full fiscal document (issuer data, service code, tax groups, schema
 
 ## Examples
 
-Runnable end-to-end programs in [`examples/`](examples/) — `simple_issue_nfe` and `simple_issue_nfse`.
-
-## Commit Style
-
-| Icon | Type      | Description                                |
-|------|-----------|--------------------------------------------|
-| ⚙️   | FEATURE   | New feature                                |
-| 📝   | LINT      | gofmt/golangci-lint fixes                  |
-| 📌   | ISSUE     | Reference to issue                         |
-| 🪲   | BUG       | Bug fix                                    |
-| 📘   | DOCS      | Documentation changes                      |
-| 📦   | MOD       | go.mod dependency updates                  |
-| ❤️️   | TEST      | Automated tests                            |
-| ⬆️   | CI/CD     | Changes in continuous integration/delivery |
-| ⚠️   | SECURITY  | Security improvements                      |
+Runnable end-to-end programs in [`examples/`](examples/) — `simple_issue_nfe` and `simple_issue_nfse`, each with a catalog of realistic line items covering every optional field.
