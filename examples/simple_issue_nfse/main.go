@@ -33,9 +33,9 @@ func main() {
 	case nil:
 		fmt.Println("Issued:", result)
 	case *stackin.ConnectionFailedError:
-		fmt.Println("Could not reach stackin-api")
+		fmt.Println("Could not reach the platform")
 	case *stackin.APIError:
-		fmt.Printf("stackin-api rejected the request (%d): %s\n", e.StatusCode, e.Detail)
+		fmt.Printf("Request rejected (%d): %s\n", e.StatusCode, e.Detail)
 	default:
 		fmt.Println("Error:", err)
 	}
