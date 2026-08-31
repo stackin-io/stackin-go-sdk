@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/joho/godotenv"
 	stackin "github.com/stackin-io/stackin-go-sdk"
 	"github.com/stackin-io/stackin-go-sdk/br"
 )
@@ -207,6 +208,7 @@ func productCatalog() []br.Product {
 }
 
 func main() {
+	godotenv.Load()
 	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("NFE_TEST_API_KEY")))
 
 	result, err := client.Issue(stackin.IssueRequest{
