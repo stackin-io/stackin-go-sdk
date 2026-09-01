@@ -86,6 +86,8 @@ type IssueRequest struct {
 	TaxID            string
 	Items            []br.Product
 	RecipientAddress *Address
+	Series           string
+	Number           string
 }
 
 func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
@@ -117,6 +119,12 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	}
 	if req.RecipientAddress != nil {
 		payload["recipient_address"] = req.RecipientAddress
+	}
+	if req.Series != "" {
+		payload["series"] = req.Series
+	}
+	if req.Number != "" {
+		payload["number"] = req.Number
 	}
 
 	return inv.request(http.MethodPost, "/invoices", payload, nil)
