@@ -1,3 +1,10 @@
+// Package stackin is the official Go SDK for the stackin fiscal
+// document API — issue, consult, and cancel Brazilian NF-e and NFS-e
+// electronic invoices with a single API key, no certificates or XML
+// handling required.
+//
+// See https://docs.stackin.io for the REST API reference and
+// https://docs.stackin.io/blog/go-sdk for the Go SDK guide.
 package stackin
 
 import (
