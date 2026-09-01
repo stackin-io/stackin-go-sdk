@@ -216,7 +216,15 @@ func main() {
 		ClientName:       "Comprador Teste Ltda",
 		TaxID:            "11222333000181",
 		Items:            productCatalog(),
-		RecipientAddress: &stackin.Address{State: "SC"},
+		RecipientAddress: &stackin.Address{
+			State:        "SC",
+			CityCode:     "4205407",
+			Street:       "Rua das Palmeiras",
+			Number:       "100",
+			Neighborhood: "Centro",
+			City:         "Florianopolis",
+			ZipCode:      "88010000",
+		},
 	})
 
 	switch e := err.(type) {

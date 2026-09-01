@@ -115,8 +115,8 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 		"tax_id":        req.TaxID,
 		"items":         items,
 	}
-	if req.RecipientAddress != nil && req.RecipientAddress.State != "" {
-		payload["recipient_state"] = req.RecipientAddress.State
+	if req.RecipientAddress != nil {
+		payload["recipient_address"] = req.RecipientAddress
 	}
 
 	return inv.request(http.MethodPost, "/invoices", payload, nil)

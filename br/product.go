@@ -33,6 +33,11 @@ type Product struct {
 	RecopiNumber               *string
 	ExtraGroups                map[string]any
 	Tax                        *Tax
+
+	ServiceCode     *string  // LC 116/2003 item.subitem, nfse only
+	ServiceDiscount *float64 // unconditional discount, nfse only
+	TaxRetained     bool     // ISSQN retained by the tomador, nfse only
+	Observations    *string  // nfse only
 }
 
 func (p Product) ToDict() map[string]any {
@@ -85,11 +90,16 @@ func (p Product) ToDict() map[string]any {
 		data["br"] = br
 	}
 
-	return map[string]any{
-		"description": p.Description,
-		"amount":      p.Amount,
-		"product":     data,
+	result := map[string]any{
+		"description":  p.Description,
+		"amount":       p.Amount,
+		"product":      data,
+		"tax_retained": p.TaxRetained,
 	}
+	setIfNotNil(result, "service_code", p.ServiceCode)
+	setIfNotNil(result, "discount", p.ServiceDiscount)
+	setIfNotNil(result, "observations", p.Observations)
+	return result
 }
 
 func setIfNotNil[T any](m map[string]any, key string, v *T) {

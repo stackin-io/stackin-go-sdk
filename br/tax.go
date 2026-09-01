@@ -68,6 +68,17 @@ type IcmsSn102 struct {
 
 func (IcmsSn102) icmsTag() string { return "ICMSSN102" }
 
+type IcmsSn900 struct {
+	Orig  *string `json:"orig,omitempty"`
+	CSOSN string  `json:"CSOSN"`
+	ModBC *string `json:"modBC,omitempty"`
+	VBC   *string `json:"vBC,omitempty"`
+	PICMS *string `json:"pICMS,omitempty"`
+	VICMS *string `json:"vICMS,omitempty"`
+}
+
+func (IcmsSn900) icmsTag() string { return "ICMSSN900" }
+
 type IcmsGroup interface {
 	icmsTag() string
 }
