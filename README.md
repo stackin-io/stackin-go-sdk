@@ -82,4 +82,4 @@ Building the full fiscal document (issuer data, service code, tax groups, schema
 
 ## Examples
 
-Runnable end-to-end programs in [`examples/`](examples/) — `simple_issue_nfe` and `simple_issue_nfse`, each with a catalog of realistic line items covering every optional field.
+Runnable end-to-end programs in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one program per field variant, from the bare minimum to every field filled.

@@ -1,0 +1,58 @@
+package common
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/joho/godotenv"
+	stackin "github.com/stackin-io/stackin-go-sdk"
+	"github.com/stackin-io/stackin-go-sdk/br"
+)
+
+func Ptr[T any](v T) *T {
+	return &v
+}
+
+var SameStateAddress = stackin.Address{
+	Street:       "Rua das Palmeiras",
+	Number:       "100",
+	Neighborhood: "Centro",
+	City:         "Florianopolis",
+	State:        "SC",
+	ZipCode:      "88010000",
+	CityCode:     "4205407",
+}
+
+var OtherStateAddress = stackin.Address{
+	Street:       "Avenida Atlantica",
+	Number:       "500",
+	Neighborhood: "Copacabana",
+	City:         "Rio de Janeiro",
+	State:        "RJ",
+	ZipCode:      "22010000",
+	CityCode:     "3304557",
+}
+
+func Issue(product br.Product, recipientAddress stackin.Address) {
+	godotenv.Load()
+	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("NFE_TEST_API_KEY")))
+
+	result, err := client.Issue(stackin.IssueRequest{
+		DocumentType:     stackin.NFE,
+		ClientName:       "Comprador Teste Ltda",
+		TaxID:            "11222333000181",
+		Items:            []br.Product{product},
+		RecipientAddress: &recipientAddress,
+	})
+
+	switch e := err.(type) {
+	case nil:
+		fmt.Println("Issued:", result)
+	case *stackin.ConnectionFailedError:
+		fmt.Println("Could not reach the platform")
+	case *stackin.APIError:
+		fmt.Printf("Request rejected (%d): %s\n", e.StatusCode, e.Detail)
+	default:
+		fmt.Println("Error:", err)
+	}
+}
