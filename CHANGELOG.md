@@ -1,5 +1,17 @@
 # Changelog — stackin (Go SDK)
 
+## 0.1.1
+
+### Added
+- `IcmsSn900`, `br.Product.ServiceCode`/`ServiceDiscount`/`TaxRetained`/`Observations` (NFSE-only fields).
+- `Series`/`Number` on `IssueRequest` for manual or auto-calculated NFe/NFSe numbering.
+- `Address.CityCode` — full recipient address instead of just `State`.
+- `examples/nfe/` and `examples/nfse/` — one program per field variant, replacing the two catalog examples.
+- Test coverage for `br.Product`/`br.Tax`, error types, and the remaining `client.go` branches (97%).
+
+### Fixed
+- `examples/nfse` used an invalid CPF `tax_id` and was missing the NFSE-only fields.
+
 ## 0.1.0
 
 ### Added
