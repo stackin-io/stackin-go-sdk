@@ -82,4 +82,4 @@ Building the full fiscal document (issuer data, service code, tax groups, schema
 
 ## Examples
 
-Runnable end-to-end programs in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one program per field variant, from the bare minimum to every field filled.
+Runnable end-to-end programs in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one program per field variant, from the bare minimum to every field filled. `examples/consult_invoice/`, `examples/cancel_invoice/`, and `examples/reissue_invoice/` cover the operations that act on an already-issued document.
