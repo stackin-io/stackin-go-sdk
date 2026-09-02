@@ -212,10 +212,10 @@ func main() {
 	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("NFE_TEST_API_KEY")))
 
 	result, err := client.Issue(stackin.IssueRequest{
-		DocumentType:     stackin.NFE,
-		ClientName:       "Comprador Teste Ltda",
-		TaxID:            "11222333000181",
-		Items:            productCatalog(),
+		DocumentType: stackin.NFE,
+		ClientName:   "Comprador Teste Ltda",
+		TaxID:        "11222333000181",
+		Items:        productCatalog(),
 		RecipientAddress: &stackin.Address{
 			State:        "SC",
 			CityCode:     "4205407",
