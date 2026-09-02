@@ -335,3 +335,49 @@ func TestRequestHandlesEmptyResponseBody(t *testing.T) {
 		t.Errorf("result = %v, want empty map", result)
 	}
 }
+
+func TestReissueSendsPostToReissuePath(t *testing.T) {
+	var gotMethod, gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_key": "reissued-key"})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	result, err := inv.Reissue("inv-1")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if gotPath != "/api/v1/invoices/inv-1/reissue" {
+		t.Errorf("path = %q, want /api/v1/invoices/inv-1/reissue", gotPath)
+	}
+	if result["access_key"] != "reissued-key" {
+		t.Errorf("result[access_key] = %v, want reissued-key", result["access_key"])
+	}
+}
+
+func TestReissueReturnsAPIErrorOnNon2xx(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "invoice not found"})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Reissue("inv-missing")
+
+	apiErr, ok := err.(*APIError)
+	if !ok {
+		t.Fatalf("error = %T, want *APIError", err)
+	}
+	if apiErr.StatusCode != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want 404", apiErr.StatusCode)
+	}
+}

@@ -143,6 +143,10 @@ func (inv *Invoice) Cancel(accessKey string, documentType DocumentType, reason s
 	return inv.request(http.MethodPost, "/invoices/"+accessKey+"/cancel", payload, nil)
 }
 
+func (inv *Invoice) Reissue(invoiceID string) (map[string]any, error) {
+	return inv.request(http.MethodPost, "/invoices/"+invoiceID+"/reissue", nil, nil)
+}
+
 type InvoiceError struct {
 	Message string
 }
