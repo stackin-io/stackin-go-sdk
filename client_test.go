@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stackin-io/stackin-go-sdk/br"
 )
@@ -199,5 +200,138 @@ func TestCancelSendsReasonAndDocumentType(t *testing.T) {
 	}
 	if body["document_type"] != string(NFSE) {
 		t.Errorf("body[document_type] = %v, want %q", body["document_type"], NFSE)
+	}
+}
+
+func TestIssueRequiresCFOPWhenNCMPresent(t *testing.T) {
+	inv := NewInvoice(WithBaseURL("https://example.com"))
+	ncm := "12345678"
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType: NFE,
+		ClientName:   "Acme",
+		TaxID:        "123",
+		Items:        []br.Product{{Description: "Widget", Amount: 10, NCM: &ncm}},
+	})
+
+	if err == nil {
+		t.Fatal("expected error for missing cfop, got nil")
+	}
+	if _, ok := err.(*InvoiceError); !ok {
+		t.Errorf("error = %T, want *InvoiceError", err)
+	}
+}
+
+func TestIssueIncludesRecipientAddressSeriesAndNumber(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:     NFSE,
+		ClientName:       "Acme",
+		TaxID:            "123",
+		Items:            []br.Product{{Description: "Servico", Amount: 10}},
+		RecipientAddress: &Address{State: "SP"},
+		Series:           "1",
+		Number:           "42",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body["series"] != "1" {
+		t.Errorf("body[series] = %v, want %q", body["series"], "1")
+	}
+	if body["number"] != "42" {
+		t.Errorf("body[number] = %v, want %q", body["number"], "42")
+	}
+	if body["recipient_address"] == nil {
+		t.Error("body[recipient_address] absent, want present")
+	}
+}
+
+func TestWithTimeoutOption(t *testing.T) {
+	inv := NewInvoice(WithTimeout(5 * time.Second))
+
+	if inv.Timeout != 5*time.Second {
+		t.Errorf("Timeout = %v, want 5s", inv.Timeout)
+	}
+}
+
+func TestWithAPIKeyOption(t *testing.T) {
+	inv := NewInvoice(WithAPIKey("abc"))
+
+	if inv.APIKey != "abc" {
+		t.Errorf("APIKey = %q, want %q", inv.APIKey, "abc")
+	}
+}
+
+func TestInvoiceErrorMessage(t *testing.T) {
+	err := &InvoiceError{Message: "boom"}
+
+	if err.Error() != "boom" {
+		t.Errorf("Error() = %q, want %q", err.Error(), "boom")
+	}
+}
+
+func TestRequestNonStringDetailIsJSONEncoded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"detail": []any{"tax_id is invalid", "cfop is invalid"},
+		})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Consult("abc123", NFE)
+
+	apiErr, ok := err.(*APIError)
+	if !ok {
+		t.Fatalf("error = %T, want *APIError", err)
+	}
+	if apiErr.Detail != `["tax_id is invalid","cfop is invalid"]` {
+		t.Errorf("Detail = %q, want JSON-encoded array", apiErr.Detail)
+	}
+}
+
+func TestRequestReturnsFullBodyWhenNoResultKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	result, err := inv.Consult("abc123", NFE)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result["status"] != "ok" {
+		t.Errorf("result[status] = %v, want ok", result["status"])
+	}
+}
+
+func TestRequestHandlesEmptyResponseBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	result, err := inv.Consult("abc123", NFE)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("result = %v, want empty map", result)
 	}
 }
