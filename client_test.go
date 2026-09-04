@@ -653,3 +653,28 @@ func TestInvalidateRejectsBadInputBeforeTheNetwork(t *testing.T) {
 		t.Error("Invalidate reached the network on locally invalid input")
 	}
 }
+
+func TestUnknownResponseFieldReachesTheCaller(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{
+			"access_key":               "ABC",
+			"status":                   "authorized",
+			"field_invented_next_year": map[string]any{"nested": []any{1, 2}},
+		}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	result, err := inv.Consult("ABC", NFSE)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result["access_key"] != "ABC" {
+		t.Errorf("access_key = %v, want ABC", result["access_key"])
+	}
+	if _, present := result["field_invented_next_year"]; !present {
+		t.Error("an unknown field was dropped; the API may add fields inside v1")
+	}
+}
