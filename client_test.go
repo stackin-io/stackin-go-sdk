@@ -591,3 +591,65 @@ func TestCorrectRejectsTextOutsideTheAllowedLength(t *testing.T) {
 		t.Error("Correct reached the network on a locally invalid correction")
 	}
 }
+
+func TestInvalidatePostsToTheInvalidationsPath(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "range-1", "status": "invalidated"})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	result, err := inv.Invalidate(InvalidationRequest{
+		Series:      "1",
+		NumberStart: 10,
+		NumberEnd:   12,
+		Reason:      "Numeracao reservada e nao utilizada por falha no ERP",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/api/v1/invoices/invalidations" {
+		t.Errorf("path = %q, want /api/v1/invoices/invalidations", gotPath)
+	}
+	if gotBody["number_start"] != float64(10) || gotBody["number_end"] != float64(12) {
+		t.Errorf("range = %v..%v, want 10..12", gotBody["number_start"], gotBody["number_end"])
+	}
+	if result["status"] != "invalidated" {
+		t.Errorf("status = %v, want invalidated", result["status"])
+	}
+}
+
+func TestInvalidateRejectsBadInputBeforeTheNetwork(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	valid := "Numeracao reservada e nao utilizada por falha no ERP"
+
+	cases := []InvalidationRequest{
+		{Series: "1", NumberStart: 10, NumberEnd: 12, Reason: "curto"},
+		{Series: "1", NumberStart: 10, NumberEnd: 12, Reason: strings.Repeat("a", 256)},
+		{Series: "1", NumberStart: 12, NumberEnd: 10, Reason: valid},
+	}
+	for _, req := range cases {
+		_, err := inv.Invalidate(req)
+
+		var invErr *InvoiceError
+		if !errors.As(err, &invErr) {
+			t.Errorf("Invalidate(%+v) error = %v, want *InvoiceError", req, err)
+		}
+	}
+	if called {
+		t.Error("Invalidate reached the network on locally invalid input")
+	}
+}
