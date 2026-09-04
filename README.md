@@ -63,20 +63,28 @@ func main() {
 		Items: []br.Product{
 			{Description: "Test product", Amount: 100.00, NCM: &ncm, CFOP: &cfop},
 		},
-		RecipientAddress: &stackin.Address{State: "RJ"},
+		RecipientAddress: &stackin.Address{
+			Street:       "Avenida Atlantica",
+			Number:       "500",
+			Neighborhood: "Copacabana",
+			City:         "Rio de Janeiro",
+			State:        "RJ",
+			ZipCode:      "22010000",
+			CityCode:     "3304557",
+		},
 	})
 	_ = status
 	fmt.Println(invoice, err)
 }
 ```
 
-`RecipientAddress` is an `Address`, but despite the name only `.State` is read — the rest of the fields aren't sent anywhere yet. It's the actual customer's state, used only to set `idDest` (interstate vs internal) on NFE — optional, omitting it always produces `idDest=1` (internal).
+`RecipientAddress` is an `Address` — the buyer's address, **required for NFE** and ignored for NFSE. Every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address returns an `*InvoiceError` locally, before the request goes out.
 
 ## Errors
 
 - `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, or missing `NCM`/`CFOP` on an item for NFE.
+- `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, or a missing/incomplete `RecipientAddress` on NFE.
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 
