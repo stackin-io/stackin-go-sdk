@@ -90,6 +90,42 @@ type IssueRequest struct {
 	Number           string
 }
 
+// validateNFEAddress rejects a missing or partial buyer address before the
+// network call — the SEFAZ rejects a partial enderDest (274/726/696/695).
+func validateNFEAddress(address *Address) error {
+	if address == nil {
+		return &InvoiceError{Message: "RecipientAddress is required for NFE"}
+	}
+
+	fields := []struct {
+		name  string
+		value string
+	}{
+		{"Street", address.Street},
+		{"Number", address.Number},
+		{"Neighborhood", address.Neighborhood},
+		{"City", address.City},
+		{"State", address.State},
+		{"ZipCode", address.ZipCode},
+		{"CityCode", address.CityCode},
+	}
+
+	var missing []string
+	for _, field := range fields {
+		if field.value == "" {
+			missing = append(missing, field.name)
+		}
+	}
+	if len(missing) > 0 {
+		return &InvoiceError{Message: fmt.Sprintf(
+			"RecipientAddress is missing required fields for NFE: %s",
+			strings.Join(missing, ", "),
+		)}
+	}
+
+	return nil
+}
+
 func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	if len(req.Items) == 0 {
 		return nil, &InvoiceError{Message: "items can't be empty"}
@@ -103,6 +139,9 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 			if item.CFOP == nil || *item.CFOP == "" {
 				return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].cfop is required for NFE", i)}
 			}
+		}
+		if err := validateNFEAddress(req.RecipientAddress); err != nil {
+			return nil, err
 		}
 	}
 
