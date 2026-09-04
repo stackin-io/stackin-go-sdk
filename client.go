@@ -203,6 +203,31 @@ func (inv *Invoice) Cancel(accessKey string, documentType DocumentType, reason s
 	return inv.request(http.MethodPost, "/invoices/"+accessKey+"/cancel", payload, nil)
 }
 
+type InvalidationRequest struct {
+	Series      string
+	NumberStart int
+	NumberEnd   int
+	Reason      string
+}
+
+func (inv *Invoice) Invalidate(req InvalidationRequest) (map[string]any, error) {
+	length := len([]rune(req.Reason))
+	if length < 15 || length > 255 {
+		return nil, &InvoiceError{Message: "reason must be 15 to 255 characters"}
+	}
+	if req.NumberEnd < req.NumberStart {
+		return nil, &InvoiceError{Message: "NumberEnd can't be below NumberStart"}
+	}
+
+	payload := map[string]any{
+		"series":       req.Series,
+		"number_start": req.NumberStart,
+		"number_end":   req.NumberEnd,
+		"reason":       req.Reason,
+	}
+	return inv.request(http.MethodPost, "/invoices/invalidations", payload, nil)
+}
+
 func (inv *Invoice) Correct(accessKey string, documentType DocumentType, correction string) (map[string]any, error) {
 	length := len([]rune(correction))
 	if length < 15 || length > 1000 {
