@@ -203,6 +203,19 @@ func (inv *Invoice) Cancel(accessKey string, documentType DocumentType, reason s
 	return inv.request(http.MethodPost, "/invoices/"+accessKey+"/cancel", payload, nil)
 }
 
+func (inv *Invoice) Correct(accessKey string, documentType DocumentType, correction string) (map[string]any, error) {
+	length := len([]rune(correction))
+	if length < 15 || length > 1000 {
+		return nil, &InvoiceError{Message: "correction must be 15 to 1000 characters"}
+	}
+
+	payload := map[string]any{
+		"document_type": string(documentType),
+		"correction":    correction,
+	}
+	return inv.request(http.MethodPost, "/invoices/"+accessKey+"/correction", payload, nil)
+}
+
 func (inv *Invoice) Reissue(invoiceID string, opts ...RequestOption) (map[string]any, error) {
 	return inv.request(http.MethodPost, "/invoices/"+invoiceID+"/reissue", nil, nil, opts...)
 }
