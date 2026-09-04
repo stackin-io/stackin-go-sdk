@@ -1,0 +1,101 @@
+name: 📦 Release MOD
+
+# Go has no registry to push to: the module proxy resolves straight from the
+# tag. So this does not publish — it makes the release reproducible. It
+# refuses a tag that disagrees with LAST_VERSION, runs the same tests and
+# lint the branch runs, and then asks the proxy for the version so the first
+# `go get` after a release is not the one paying to warm the cache.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to verify, e.g. v0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-version:
+    name: Verify the tag matches LAST_VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Compare tag against LAST_VERSION
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          VERSION="${TAG#v}"
+          DECLARED="$(tr -d '[:space:]' < LAST_VERSION)"
+
+          echo "tag:          $TAG"
+          echo "LAST_VERSION: $DECLARED"
+
+          if [ "$VERSION" != "$DECLARED" ]; then
+            echo "::error::Tag $TAG says $VERSION but LAST_VERSION says $DECLARED."
+            echo "::error::Update LAST_VERSION and re-tag — the proxy serves the tag forever."
+            exit 1
+          fi
+
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::The Go proxy needs a semver tag prefixed with v, got $TAG."
+            exit 1
+          fi
+
+  test:
+    name: Run Tests
+    needs: [verify-version]
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+
+  code-quality:
+    name: Code Quality Checks
+    needs: [verify-version]
+    uses: ./.github/workflows/code-quality.yml
+    secrets: inherit
+
+  warm-proxy:
+    name: Warm the module proxy
+    needs: [verify-version, test, code-quality]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: "1.23"
+
+      - name: 🔥 Ask the proxy for this version
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          MODULE="$(head -1 go.mod | cut -d' ' -f2)"
+          echo "fetching $MODULE@$TAG"
+
+          for attempt in 1 2 3 4 5; do
+            if GOPROXY=https://proxy.golang.org go list -m "$MODULE@$TAG"; then
+              echo "proxy is serving $TAG"
+              exit 0
+            fi
+            echo "not indexed yet, retrying in 30s (attempt $attempt/5)"
+            sleep 30
+          done
+
+          echo "::warning::The proxy has not indexed $TAG yet."
+          echo "::warning::It usually catches up on its own; go get will trigger it."
+
+      - name: 📋 Summary
+        if: always()
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          echo "### Released $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "go get github.com/stackin-io/stackin-go-sdk@$TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
