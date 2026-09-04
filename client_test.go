@@ -4,11 +4,26 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stackin-io/stackin-go-sdk/br"
 )
+
+// validNFEAddress is the buyer address NFE issuance requires — every field
+// filled, so tests exercising something other than address validation pass it.
+func validNFEAddress() *Address {
+	return &Address{
+		Street:       "Rua das Flores",
+		Number:       "1200",
+		Neighborhood: "Centro",
+		City:         "Joinville",
+		State:        "SC",
+		ZipCode:      "89201100",
+		CityCode:     "4209102",
+	}
+}
 
 func TestNewInvoiceDefaultsToSDKHost(t *testing.T) {
 	t.Setenv("STACKIN_BASE_URL", "")
@@ -87,6 +102,68 @@ func TestIssueRequiresNCMAndCFOPForNFE(t *testing.T) {
 	}
 }
 
+func TestIssueRequiresRecipientAddressForNFE(t *testing.T) {
+	inv := NewInvoice(WithBaseURL("https://example.com"))
+	ncm := "12345678"
+	cfop := "5102"
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType: NFE,
+		ClientName:   "Acme",
+		TaxID:        "123",
+		Items:        []br.Product{{Description: "Widget", Amount: 10, NCM: &ncm, CFOP: &cfop}},
+	})
+
+	if err == nil {
+		t.Fatal("expected error for missing recipient address, got nil")
+	}
+	if _, ok := err.(*InvoiceError); !ok {
+		t.Errorf("error = %T, want *InvoiceError", err)
+	}
+}
+
+func TestIssueRejectsPartialRecipientAddressForNFE(t *testing.T) {
+	inv := NewInvoice(WithBaseURL("https://example.com"))
+	ncm := "12345678"
+	cfop := "5102"
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:     NFE,
+		ClientName:       "Acme",
+		TaxID:            "123",
+		Items:            []br.Product{{Description: "Widget", Amount: 10, NCM: &ncm, CFOP: &cfop}},
+		RecipientAddress: &Address{State: "SC"},
+	})
+
+	if err == nil {
+		t.Fatal("expected error for partial recipient address, got nil")
+	}
+	if !strings.Contains(err.Error(), "CityCode") {
+		t.Errorf("error = %q, want it to name the missing fields", err.Error())
+	}
+}
+
+func TestIssueAllowsNFSEWithoutRecipientAddress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL), WithAPIKey("test-key"))
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType: NFSE,
+		ClientName:   "Acme",
+		TaxID:        "123",
+		Items:        []br.Product{{Description: "Consulting", Amount: 10}},
+	})
+
+	if err != nil {
+		t.Fatalf("nfse shouldn't need a recipient address: %v", err)
+	}
+}
+
 func TestIssuePostsToInvoicesEndpointWithAuthHeader(t *testing.T) {
 	var gotAuth, gotPath, gotMethod string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -105,10 +182,11 @@ func TestIssuePostsToInvoicesEndpointWithAuthHeader(t *testing.T) {
 	cfop := "5102"
 
 	result, err := inv.Issue(IssueRequest{
-		DocumentType: NFE,
-		ClientName:   "Acme",
-		TaxID:        "123",
-		Items:        []br.Product{{Description: "Widget", Amount: 10, NCM: &ncm, CFOP: &cfop}},
+		DocumentType:     NFE,
+		ClientName:       "Acme",
+		TaxID:            "123",
+		Items:            []br.Product{{Description: "Widget", Amount: 10, NCM: &ncm, CFOP: &cfop}},
+		RecipientAddress: validNFEAddress(),
 	})
 
 	if err != nil {
