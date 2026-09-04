@@ -459,3 +459,79 @@ func TestReissueReturnsAPIErrorOnNon2xx(t *testing.T) {
 		t.Errorf("StatusCode = %d, want 404", apiErr.StatusCode)
 	}
 }
+
+func TestIssueSendsIdempotencyKeyHeaderWhenSet(t *testing.T) {
+	var gotKey string
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("Idempotency-Key")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"access_key": "abc"}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:   NFSE,
+		ClientName:     "Buyer",
+		TaxID:          "123",
+		Items:          []br.Product{{Description: "Servico", Amount: 100}},
+		IdempotencyKey: "idem-1",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotKey != "idem-1" {
+		t.Errorf("Idempotency-Key = %q, want idem-1", gotKey)
+	}
+	if _, present := gotBody["idempotency_key"]; present {
+		t.Error("idempotency_key leaked into the request body")
+	}
+}
+
+func TestIssueOmitsIdempotencyKeyHeaderByDefault(t *testing.T) {
+	var present bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, present = r.Header["Idempotency-Key"]
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Issue(IssueRequest{
+		DocumentType: NFSE,
+		ClientName:   "Buyer",
+		TaxID:        "123",
+		Items:        []br.Product{{Description: "Servico", Amount: 100}},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if present {
+		t.Error("Idempotency-Key sent when none was set")
+	}
+}
+
+func TestReissueSendsIdempotencyKeyHeaderWhenSet(t *testing.T) {
+	var gotKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("Idempotency-Key")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_key": "reissued-key"})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Reissue("inv-1", WithIdempotencyKey("idem-2"))
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotKey != "idem-2" {
+		t.Errorf("Idempotency-Key = %q, want idem-2", gotKey)
+	}
+}
