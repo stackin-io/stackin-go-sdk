@@ -88,6 +88,26 @@ type IssueRequest struct {
 	RecipientAddress *Address
 	Series           string
 	Number           string
+
+	// IdempotencyKey makes a retry safe: the same key with the same body
+	// replays the first response instead of issuing a second document.
+	// Keys live 24 hours. Never generated for you — only the caller knows
+	// which two requests are meant to be the same one.
+	IdempotencyKey string
+}
+
+// RequestOption tunes a single call, as opposed to Option, which tunes the
+// client.
+type RequestOption func(*requestConfig)
+
+type requestConfig struct {
+	idempotencyKey string
+}
+
+// WithIdempotencyKey attaches an Idempotency-Key to one call. See
+// IssueRequest.IdempotencyKey for what the API does with it.
+func WithIdempotencyKey(key string) RequestOption {
+	return func(cfg *requestConfig) { cfg.idempotencyKey = key }
 }
 
 // validateNFEAddress rejects a missing or partial buyer address before the
@@ -166,7 +186,8 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 		payload["number"] = req.Number
 	}
 
-	return inv.request(http.MethodPost, "/invoices", payload, nil)
+	return inv.request(http.MethodPost, "/invoices", payload, nil,
+		WithIdempotencyKey(req.IdempotencyKey))
 }
 
 func (inv *Invoice) Consult(accessKey string, documentType DocumentType) (map[string]any, error) {
@@ -182,8 +203,8 @@ func (inv *Invoice) Cancel(accessKey string, documentType DocumentType, reason s
 	return inv.request(http.MethodPost, "/invoices/"+accessKey+"/cancel", payload, nil)
 }
 
-func (inv *Invoice) Reissue(invoiceID string) (map[string]any, error) {
-	return inv.request(http.MethodPost, "/invoices/"+invoiceID+"/reissue", nil, nil)
+func (inv *Invoice) Reissue(invoiceID string, opts ...RequestOption) (map[string]any, error) {
+	return inv.request(http.MethodPost, "/invoices/"+invoiceID+"/reissue", nil, nil, opts...)
 }
 
 type InvoiceError struct {
@@ -194,7 +215,12 @@ func (e *InvoiceError) Error() string {
 	return e.Message
 }
 
-func (inv *Invoice) request(method, path string, payload any, params url.Values) (map[string]any, error) {
+func (inv *Invoice) request(method, path string, payload any, params url.Values, opts ...RequestOption) (map[string]any, error) {
+	var cfg requestConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	reqURL := inv.BaseURL + "/api/v1" + path
 	if len(params) > 0 {
 		reqURL += "?" + params.Encode()
@@ -218,6 +244,9 @@ func (inv *Invoice) request(method, path string, payload any, params url.Values)
 	}
 	if inv.APIKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+inv.APIKey)
+	}
+	if cfg.idempotencyKey != "" {
+		httpReq.Header.Set("Idempotency-Key", cfg.idempotencyKey)
 	}
 
 	resp, err := inv.httpClient.Do(httpReq)
