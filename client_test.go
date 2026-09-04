@@ -2,6 +2,7 @@ package stackin
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -533,5 +534,60 @@ func TestReissueSendsIdempotencyKeyHeaderWhenSet(t *testing.T) {
 	}
 	if gotKey != "idem-2" {
 		t.Errorf("Idempotency-Key = %q, want idem-2", gotKey)
+	}
+}
+
+func TestCorrectPostsToTheCorrectionPath(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"status": "authorized"}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	result, err := inv.Correct("abc123", NFE, "Transportadora corrigida para Rapido Ltda")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if gotPath != "/api/v1/invoices/abc123/correction" {
+		t.Errorf("path = %q, want /api/v1/invoices/abc123/correction", gotPath)
+	}
+	if gotBody["document_type"] != "nfe" {
+		t.Errorf("document_type = %v, want nfe", gotBody["document_type"])
+	}
+	if result["status"] != "authorized" {
+		t.Errorf("status = %v, want authorized", result["status"])
+	}
+}
+
+func TestCorrectRejectsTextOutsideTheAllowedLength(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+
+	for _, correction := range []string{"curto demais", strings.Repeat("a", 1001)} {
+		_, err := inv.Correct("abc123", NFE, correction)
+
+		var invErr *InvoiceError
+		if !errors.As(err, &invErr) {
+			t.Errorf("Correct(%d chars) error = %v, want *InvoiceError", len(correction), err)
+		}
+	}
+	if called {
+		t.Error("Correct reached the network on a locally invalid correction")
 	}
 }
