@@ -746,3 +746,85 @@ func TestPdfSurfacesNotImplementedForNFE(t *testing.T) {
 		t.Errorf("StatusCode = %d, want 501", apiErr.StatusCode)
 	}
 }
+
+// Received reads what the API already collected: the SEFAZ caps how many
+// times a CNPJ may ask, so a listing must never reach the authorizer.
+func TestReceivedListsWithoutPagination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/received-invoices" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if r.URL.RawQuery != "" {
+			t.Errorf("query = %q, want empty", r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	if _, err := inv.Received(0, 0); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReceivedPassesPaginationThrough(t *testing.T) {
+	var seen string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.URL.Query().Encode()
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	if _, err := inv.Received(10, 20); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if seen != "limit=10&offset=20" {
+		t.Errorf("query = %q", seen)
+	}
+}
+
+func TestManifestSendsTheAnswer(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/received-invoices/abc123/manifestation" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"result":{"status":"registered"}}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	if _, err := inv.Manifest("abc123", Ciencia, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if body["manifestation"] != "210210" {
+		t.Errorf("manifestation = %v", body["manifestation"])
+	}
+}
+
+func TestManifestRequiresAReasonForOperacaoNaoRealizada(t *testing.T) {
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL("https://api.test"))
+
+	_, err := inv.Manifest("abc123", OperacaoNaoRealizada, "")
+
+	var invoiceErr *InvoiceError
+	if !errors.As(err, &invoiceErr) {
+		t.Fatalf("error = %v, want *InvoiceError", err)
+	}
+}
+
+func TestManifestRefusesAReasonWhereNoneIsTaken(t *testing.T) {
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL("https://api.test"))
+
+	_, err := inv.Manifest("abc123", Ciencia, "um motivo qualquer")
+
+	var invoiceErr *InvoiceError
+	if !errors.As(err, &invoiceErr) {
+		t.Fatalf("error = %v, want *InvoiceError", err)
+	}
+}
