@@ -59,9 +59,35 @@ jobs:
     uses: ./.github/workflows/code-quality.yml
     secrets: inherit
 
+  integration:
+    name: Issue a real document
+    needs: [verify-version, test, code-quality]
+    runs-on: ubuntu-latest
+    environment: workflow
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version: "1.23"
+
+      - name: 🧾 Issue an NFS-e through the published surface
+        env:
+          STACKIN_API_KEY: ${{ secrets.STACKIN_API_KEY }}
+        run: go run ./examples/nfse/basic
+
+      - name: 📋 Summary
+        if: always()
+        run: |
+          echo "### Integration ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "examples/nfse/basic against the live API" >> "$GITHUB_STEP_SUMMARY"
+
   warm-proxy:
     name: Warm the module proxy
-    needs: [verify-version, test, code-quality]
+    needs: [verify-version, test, code-quality, integration]
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout code
