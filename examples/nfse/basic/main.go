@@ -1,12 +1,33 @@
-// Only description/amount — service_code falls back to the company's fiscal profile.
 package main
 
 import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+	stackin "github.com/stackin-io/stackin-go-sdk"
 	"github.com/stackin-io/stackin-go-sdk/br"
-	"github.com/stackin-io/stackin-go-sdk/examples/nfse/common"
 )
 
 func main() {
-	product := br.Product{Description: "Software development", Amount: 5000.00}
-	common.Issue(product, nil)
+	godotenv.Load()
+	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
+
+	product := br.Product{
+		Description: "Software development",
+		Amount:      5000.00,
+	}
+
+	result, err := client.Issue(stackin.IssueRequest{
+		DocumentType: stackin.NFSE,
+		ClientName:   "Comprador Teste Ltda",
+		TaxID:        "11222333000181",
+		Items:        []br.Product{product},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(result)
 }

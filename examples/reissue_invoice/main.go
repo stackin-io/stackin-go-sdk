@@ -10,13 +10,9 @@ import (
 
 func main() {
 	godotenv.Load()
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run ./examples/reissue_invoice <invoice_id>")
-		return
-	}
-	invoiceID := os.Args[1]
+	invoiceID := "00000000-0000-0000-0000-000000000000"
 
-	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("NFE_TEST_API_KEY")))
+	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
 	result, err := client.Reissue(invoiceID)
 
 	switch e := err.(type) {

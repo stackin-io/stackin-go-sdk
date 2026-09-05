@@ -10,13 +10,11 @@ import (
 
 func main() {
 	godotenv.Load()
-	if len(os.Args) < 4 {
-		fmt.Println("Usage: go run ./examples/cancel_invoice <access_key> <nfe|nfse> <reason>")
-		return
-	}
-	accessKey, documentType, reason := os.Args[1], stackin.DocumentType(os.Args[2]), os.Args[3]
+	accessKey := "42250611222333000181550010000000011000000017"
+	documentType := stackin.NFE
+	reason := "Emitida com dados incorretos do destinatario"
 
-	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("NFE_TEST_API_KEY")))
+	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
 	result, err := client.Cancel(accessKey, documentType, reason)
 
 	switch e := err.(type) {

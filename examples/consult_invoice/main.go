@@ -10,13 +10,10 @@ import (
 
 func main() {
 	godotenv.Load()
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: go run ./examples/consult_invoice <access_key> <nfe|nfse>")
-		return
-	}
-	accessKey, documentType := os.Args[1], stackin.DocumentType(os.Args[2])
+	accessKey := "42250611222333000181550010000000011000000017"
+	documentType := stackin.NFE
 
-	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("NFE_TEST_API_KEY")))
+	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
 	result, err := client.Consult(accessKey, documentType)
 
 	switch e := err.(type) {

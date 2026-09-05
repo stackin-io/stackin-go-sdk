@@ -1,17 +1,39 @@
-// A free-text note attached to the service.
 package main
 
 import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+	stackin "github.com/stackin-io/stackin-go-sdk"
 	"github.com/stackin-io/stackin-go-sdk/br"
-	"github.com/stackin-io/stackin-go-sdk/examples/nfse/common"
 )
 
+func ptr[T any](value T) *T {
+	return &value
+}
+
 func main() {
+	godotenv.Load()
+	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
+
 	product := br.Product{
 		Description:  "Systems analysis and development",
 		Amount:       2400.00,
-		ServiceCode:  common.Ptr("1.01"),
-		Observations: common.Ptr("Referente ao contrato #2026-0042, etapa 2 de 3."),
+		ServiceCode:  ptr("1.01"),
+		Observations: ptr("Referente ao contrato #2026-0042, etapa 2 de 3."),
 	}
-	common.Issue(product, nil)
+
+	result, err := client.Issue(stackin.IssueRequest{
+		DocumentType: stackin.NFSE,
+		ClientName:   "Comprador Teste Ltda",
+		TaxID:        "11222333000181",
+		Items:        []br.Product{product},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(result)
 }
