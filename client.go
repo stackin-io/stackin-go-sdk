@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -251,6 +252,51 @@ type InvoiceError struct {
 
 func (e *InvoiceError) Error() string {
 	return e.Message
+}
+
+// Received lists documents other companies issued against this one.
+//
+// Reads what the API already collected; it does not call the authorizer.
+// Collecting runs on a schedule there, because the SEFAZ caps how many
+// times a CNPJ may ask per day.
+func (inv *Invoice) Received(limit, offset int) (map[string]any, error) {
+	params := url.Values{}
+	if limit > 0 {
+		params.Set("limit", strconv.Itoa(limit))
+	}
+	if offset > 0 {
+		params.Set("offset", strconv.Itoa(offset))
+	}
+	return inv.request(http.MethodGet, "/received-invoices", nil, params)
+}
+
+// Manifest files the recipient's formal answer to a received document.
+//
+// Only OperacaoNaoRealizada takes a reason, and it requires one. Both are
+// fixed rules, checked here rather than spending a round trip to be told.
+func (inv *Invoice) Manifest(accessKey string, manifestation Manifestation, reason string) (map[string]any, error) {
+	needsReason := manifestation == OperacaoNaoRealizada
+	if needsReason && reason == "" {
+		return nil, &InvoiceError{
+			Message: "manifestation 210240 (operacao nao realizada) requires a reason",
+		}
+	}
+	if !needsReason && reason != "" {
+		return nil, &InvoiceError{
+			Message: fmt.Sprintf("manifestation %s does not take a reason", manifestation),
+		}
+	}
+
+	payload := map[string]any{"manifestation": string(manifestation)}
+	if reason != "" {
+		payload["reason"] = reason
+	}
+	return inv.request(
+		http.MethodPost,
+		"/received-invoices/"+accessKey+"/manifestation",
+		payload,
+		nil,
+	)
 }
 
 // Pdf returns the authorizer's own rendering of an authorized document,
