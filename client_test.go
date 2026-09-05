@@ -678,3 +678,71 @@ func TestUnknownResponseFieldReachesTheCaller(t *testing.T) {
 		t.Error("an unknown field was dropped; the API may add fields inside v1")
 	}
 }
+
+// Pdf is the only method returning bytes; a JSON round trip would corrupt
+// the document, and the authorizer's endpoint for it is unstable by its
+// own documentation, so a 502 must stay distinguishable from a bad note.
+func TestPdfReturnsTheBytesUntouched(t *testing.T) {
+	body := []byte("%PDF-1.4 fake document")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/invoices/abc123/pdf" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("document_type"); got != "nfse" {
+			t.Errorf("document_type = %q, want nfse", got)
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	got, err := inv.Pdf("abc123", NFSE)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(got) != string(body) {
+		t.Errorf("Pdf() = %q, want %q", got, body)
+	}
+}
+
+func TestPdfSurfacesAnUnavailableAuthorizer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"detail":"authorizer unavailable"}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	_, err := inv.Pdf("abc123", NFSE)
+
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %v, want *APIError", err)
+	}
+	if apiErr.StatusCode != http.StatusBadGateway {
+		t.Errorf("StatusCode = %d, want 502", apiErr.StatusCode)
+	}
+}
+
+func TestPdfSurfacesNotImplementedForNFE(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotImplemented)
+		_, _ = w.Write([]byte(`{"detail":"a PDF isn't available for nfe yet"}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	_, err := inv.Pdf("abc123", NFE)
+
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %v, want *APIError", err)
+	}
+	if apiErr.StatusCode != http.StatusNotImplemented {
+		t.Errorf("StatusCode = %d, want 501", apiErr.StatusCode)
+	}
+}
