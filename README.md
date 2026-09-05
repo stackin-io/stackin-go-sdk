@@ -18,7 +18,7 @@
 
 Go SDK for issuing, consulting and cancelling electronic invoices — a handful of business fields, nothing about certificates, XML, XSD, signing or SOAP. The API resolves all of that from the issuer's own configuration, identified by `api_key`.
 
-**One struct, `Invoice`** — `Issue()`/`Consult()`/`Cancel()`/`Reissue()`, nothing else to instantiate. Each line item is a `br.Product` — `Description`/`Amount` apply to any document type, `NCM`/`CFOP` (plus everything else on `Product`: `CEST`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE.
+**One struct, `Invoice`** — `Issue()`/`Consult()`/`Cancel()`/`Reissue()`/`Correct()`/`Invalidate()`/`Pdf()`/`Received()`/`Manifest()`, nothing else to instantiate. Each line item is a `br.Product` — `Description`/`Amount` apply to any document type, `NCM`/`CFOP` (plus everything else on `Product`: `CEST`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE.
 
 ## Install
 
@@ -73,6 +73,11 @@ func main() {
 			CityCode:     "3304557",
 		},
 	})
+	// The authorizer's PDF, as raw bytes. NFS-e only; the XML stays the
+	// legally valid document, and a 502 here means the authorizer is down.
+	document, err := client.Pdf("ACCESS_KEY...", stackin.NFSE)
+	err = os.WriteFile("nota.pdf", document, 0o644)
+
 	_ = status
 	fmt.Println(invoice, err)
 }
@@ -177,6 +182,42 @@ its own records first and answers `409` naming the offending numbers, without a
 round trip — and the authorizer checks again for what we can't see from here.
 
 **NF-e only**, and it takes no access key: there is no document to point at.
+
+## Documents issued against you
+
+Everything above serves the **issuer**. These two serve the **recipient**: what
+suppliers billed to this CNPJ, and the formal answer to it.
+
+Reading the list never calls the SEFAZ. The authorizer caps how many times a CNPJ
+may ask for its distribution per day, so collecting runs on a schedule on the API
+side and a page refresh cannot spend that allowance.
+
+```go
+page, err := client.Received(20, 0)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(page["total"])
+
+if _, err := client.Manifest(accessKey, stackin.Ciencia, ""); err != nil {
+    log.Fatal(err)
+}
+_, err = client.Manifest(
+    accessKey,
+    stackin.OperacaoNaoRealizada,
+    "Mercadoria nunca chegou ao endereco",
+)
+```
+
+Before you answer a document the SEFAZ sends only a **summary** (`resNFe`): access
+key, issuer, amount, date. The **full document** (`nfeProc`) arrives after a
+manifestation, and the `schema` field on each row says which one you hold.
+
+The four answers are `210200` Confirmação da Operação, `210210` Ciência da
+Operação, `210220` Desconhecimento da Operação and `210240` Operação não
+Realizada. Only the last one takes a reason, and it requires one — both rules are
+checked locally, before the request goes out, because a round trip to be told a
+fixed rule is a round trip wasted.
 
 ## Errors
 
