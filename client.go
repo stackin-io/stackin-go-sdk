@@ -253,7 +253,34 @@ func (e *InvoiceError) Error() string {
 	return e.Message
 }
 
+// Pdf returns the authorizer's own rendering of an authorized document,
+// as raw bytes — the only method that does not return a parsed object.
+// The XML is the legally valid document; this is a convenience, and the
+// authorizer's endpoint for it is unstable, so an APIError with status
+// 502 means the authorizer is unavailable, not that the invoice is
+// wrong. NFS-e only.
+func (inv *Invoice) Pdf(accessKey string, documentType DocumentType) ([]byte, error) {
+	params := url.Values{"document_type": {string(documentType)}}
+	return inv.send(http.MethodGet, "/invoices/"+accessKey+"/pdf", nil, params)
+}
+
 func (inv *Invoice) request(method, path string, payload any, params url.Values, opts ...RequestOption) (map[string]any, error) {
+	raw, err := inv.send(method, path, payload, params, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed map[string]any
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &parsed)
+	}
+	if result, ok := parsed["result"].(map[string]any); ok {
+		return result, nil
+	}
+	return parsed, nil
+}
+
+func (inv *Invoice) send(method, path string, payload any, params url.Values, opts ...RequestOption) ([]byte, error) {
 	var cfg requestConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -315,8 +342,5 @@ func (inv *Invoice) request(method, path string, payload any, params url.Values,
 		return nil, &APIError{StatusCode: resp.StatusCode, Detail: detail}
 	}
 
-	if result, ok := parsed["result"].(map[string]any); ok {
-		return result, nil
-	}
-	return parsed, nil
+	return raw, nil
 }
