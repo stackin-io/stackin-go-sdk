@@ -151,9 +151,9 @@ func TestProductToDictWithTax(t *testing.T) {
 	brData := product["br"].(map[string]any)
 	taxData := brData["tax"].(map[string]any)
 
-	icms := taxData["ICMS"].(map[string]any)
-	if _, ok := icms["ICMSSN102"]; !ok {
-		t.Errorf("ICMS = %v, want ICMSSN102 key", icms)
+	icms := taxData["icms"].(map[string]any)
+	if icms["csosn"] != "102" {
+		t.Errorf("icms = %v, want csosn 102", icms)
 	}
 }
 
