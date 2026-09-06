@@ -270,6 +270,44 @@ func (inv *Invoice) Received(limit, offset int) (map[string]any, error) {
 	return inv.request(http.MethodGet, "/received-invoices", nil, params)
 }
 
+// HistoryQuery filters the issuance history. Every field is optional; the
+// zero value asks for the newest page with the API's own defaults.
+type HistoryQuery struct {
+	DocumentType DocumentType
+	Status       string
+	Limit        int
+	Offset       int
+	SortBy       string
+	OrderBy      string
+}
+
+// History lists what this company issued, newest first.
+//
+// The counterpart of Received: that one lists what was issued against the
+// company, this one what the company issued.
+func (inv *Invoice) History(query HistoryQuery) (map[string]any, error) {
+	params := url.Values{}
+	if query.DocumentType != "" {
+		params.Set("document_type", string(query.DocumentType))
+	}
+	if query.Status != "" {
+		params.Set("status", query.Status)
+	}
+	if query.Limit > 0 {
+		params.Set("limit", strconv.Itoa(query.Limit))
+	}
+	if query.Offset > 0 {
+		params.Set("offset", strconv.Itoa(query.Offset))
+	}
+	if query.SortBy != "" {
+		params.Set("sort_by", query.SortBy)
+	}
+	if query.OrderBy != "" {
+		params.Set("order_by", query.OrderBy)
+	}
+	return inv.request(http.MethodGet, "/invoices", nil, params)
+}
+
 // Manifest files the recipient's formal answer to a received document.
 //
 // Only OperacaoNaoRealizada takes a reason, and it requires one. Both are
