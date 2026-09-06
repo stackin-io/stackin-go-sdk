@@ -196,12 +196,16 @@ func (inv *Invoice) Consult(accessKey string, documentType DocumentType) (map[st
 	return inv.request(http.MethodGet, "/invoices/"+accessKey, nil, params)
 }
 
-func (inv *Invoice) Cancel(accessKey string, documentType DocumentType, reason string) (map[string]any, error) {
+// Cancel voids an authorized document. Pass WithIdempotencyKey to make a
+// retry safe: repeating the same key with the same body replays the first
+// answer instead of cancelling twice. This is the one irreversible
+// operation here, with a legal window and no undo.
+func (inv *Invoice) Cancel(accessKey string, documentType DocumentType, reason string, opts ...RequestOption) (map[string]any, error) {
 	payload := map[string]any{
 		"document_type": string(documentType),
 		"reason":        reason,
 	}
-	return inv.request(http.MethodPost, "/invoices/"+accessKey+"/cancel", payload, nil)
+	return inv.request(http.MethodPost, "/invoices/"+accessKey+"/cancel", payload, nil, opts...)
 }
 
 type InvalidationRequest struct {

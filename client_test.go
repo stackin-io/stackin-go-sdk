@@ -937,3 +937,46 @@ func TestSubmissionsRejectsAResponseThatIsNotAList(t *testing.T) {
 		t.Error("expected an error for a non-list body")
 	}
 }
+
+func TestCancelSendsIdempotencyKeyHeaderWhenSet(t *testing.T) {
+	// Cancelling is the irreversible one: a blind retry on a dropped
+	// connection used to reach the authorizer twice.
+	var gotKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.Header.Get("Idempotency-Key")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"status": "cancelled"}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Cancel("42054072268849750000176", NFSE, "cancelled by the customer", WithIdempotencyKey("idem-3"))
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotKey != "idem-3" {
+		t.Errorf("Idempotency-Key = %q, want idem-3", gotKey)
+	}
+}
+
+func TestCancelOmitsIdempotencyKeyHeaderByDefault(t *testing.T) {
+	// Opt-in: only the caller knows which two requests are one.
+	var present bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, present = r.Header["Idempotency-Key"]
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"status": "cancelled"}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Cancel("42054072268849750000176", NFSE, "cancelled by the customer")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if present {
+		t.Error("Idempotency-Key was sent without being asked for")
+	}
+}
