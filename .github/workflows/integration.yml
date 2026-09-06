@@ -23,7 +23,9 @@ jobs:
       - name: 🧾 Issue an NFS-e through the published surface
         env:
           STACKIN_API_KEY: ${{ secrets.STACKIN_API_KEY }}
-        run: go run ./examples/nfse/basic
+        run: |
+          go run ./examples/nfse/basic > result.json
+          echo "the API issued a document"
 
       - name: 📋 Summary
         if: always()

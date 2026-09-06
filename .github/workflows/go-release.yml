@@ -64,7 +64,6 @@ jobs:
     needs: [verify-version, test, code-quality]
     uses: ./.github/workflows/integration.yml
     secrets: inherit
-          echo "examples/nfse/basic against the live API" >> "$GITHUB_STEP_SUMMARY"
 
   warm-proxy:
     name: Warm the module proxy
