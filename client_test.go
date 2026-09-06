@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -826,5 +827,78 @@ func TestManifestRefusesAReasonWhereNoneIsTaken(t *testing.T) {
 	var invoiceErr *InvoiceError
 	if !errors.As(err, &invoiceErr) {
 		t.Fatalf("error = %v, want *InvoiceError", err)
+	}
+}
+
+func TestHistoryListsWithoutFilters(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/invoices" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if r.URL.RawQuery != "" {
+			t.Errorf("query = %q, want empty", r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	if _, err := inv.History(HistoryQuery{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestHistoryPassesEveryFilterThrough(t *testing.T) {
+	var seen url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.URL.Query()
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	_, err := inv.History(HistoryQuery{
+		DocumentType: NFE,
+		Status:       "rejected",
+		Limit:        10,
+		Offset:       20,
+		SortBy:       "created_at",
+		OrderBy:      "asc",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := map[string]string{
+		"document_type": "nfe",
+		"status":        "rejected",
+		"limit":         "10",
+		"offset":        "20",
+		"sort_by":       "created_at",
+		"order_by":      "asc",
+	}
+	for key, value := range want {
+		if seen.Get(key) != value {
+			t.Errorf("%s = %q, want %q", key, seen.Get(key), value)
+		}
+	}
+}
+
+func TestHistoryReturnsTheEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"abc"}],"total":1}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	result, err := inv.History(HistoryQuery{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result["total"] != float64(1) {
+		t.Errorf("total = %v, want 1", result["total"])
 	}
 }
