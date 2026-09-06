@@ -348,6 +348,27 @@ func (inv *Invoice) Pdf(accessKey string, documentType DocumentType) ([]byte, er
 	return inv.send(http.MethodGet, "/invoices/"+accessKey+"/pdf", nil, params)
 }
 
+// Submissions returns every attempt made for one invoice, with what the
+// authorizer answered to each.
+//
+// Consult gives the status; this gives the reason. It takes the invoiceID,
+// like Reissue and unlike everything else, because a rejected document has
+// no access key to look it up by.
+func (inv *Invoice) Submissions(invoiceID string) ([]map[string]any, error) {
+	raw, err := inv.send(http.MethodGet, "/invoices/"+invoiceID+"/submissions", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed []map[string]any
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, &InvoiceError{Message: "unexpected response shape: " + err.Error()}
+		}
+	}
+	return parsed, nil
+}
+
 func (inv *Invoice) request(method, path string, payload any, params url.Values, opts ...RequestOption) (map[string]any, error) {
 	raw, err := inv.send(method, path, payload, params, opts...)
 	if err != nil {
