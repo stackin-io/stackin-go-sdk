@@ -902,3 +902,38 @@ func TestHistoryReturnsTheEnvelope(t *testing.T) {
 		t.Errorf("total = %v, want 1", result["total"])
 	}
 }
+
+func TestSubmissionsReadsTheAttemptsByInvoiceID(t *testing.T) {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_, _ = w.Write([]byte(`[{"status":"rejected","status_code":"209"}]`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	rows, err := inv.Submissions("abc-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != "/api/v1/invoices/abc-123/submissions" {
+		t.Errorf("path = %q", path)
+	}
+	if len(rows) != 1 || rows[0]["status_code"] != "209" {
+		t.Errorf("rows = %v", rows)
+	}
+}
+
+func TestSubmissionsRejectsAResponseThatIsNotAList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"result":{}}`))
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
+
+	if _, err := inv.Submissions("abc-123"); err == nil {
+		t.Error("expected an error for a non-list body")
+	}
+}
