@@ -15,7 +15,7 @@ func main() {
 	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
 
 	product := br.Product{
-		Description: "Software development",
+		Description: "Software development SDK Go",
 		Amount:      5000.00,
 	}
 
