@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description: "Caixa de parafusos",
-		Amount:      12.50,
+		UnitPrice:   ptr(12.50),
 		NCM:         ptr("73181500"),
 		CFOP:        ptr("5102"),
 		Unit:        "CX",
