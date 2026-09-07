@@ -20,6 +20,35 @@ Go SDK for issuing, consulting and cancelling electronic invoices — a handful 
 
 **One struct, `Invoice`** — `Issue()`/`Consult()`/`Cancel()`/`Reissue()`/`Correct()`/`Invalidate()`/`Pdf()`/`Received()`/`Manifest()`, nothing else to instantiate. Each line item is a `br.Product` — `Description`/`Amount` apply to any document type, `NCM`/`CFOP` (plus everything else on `Product`: `CEST`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE.
 
+## What a line item is worth
+
+`UnitPrice` is the price of **one unit**. `Amount` is the **gross total of
+the line's products**, before discount, freight, insurance and other
+expenses. Send either; sending both asserts that they agree.
+
+```go
+price := 120.00
+
+// More than one unit — the note's line is 2 x 120.00 = 240.00
+br.Product{Description: "Teclado", Quantity: 2, UnitPrice: &price, Unit: "UN"}
+
+// Legacy: Amount alone still means the line's gross total
+br.Product{Description: "Servico", Quantity: 3, Amount: 150.00}
+```
+
+Amounts that do not add up are refused before the authorizer sees them,
+with a `422` naming the line and both numbers (`ITEM_TOTAL_MISMATCH`).
+
+### Migrating
+
+```text
+Before:  Quantity: 3, Amount: 150.00
+After:   Quantity: 3, UnitPrice: &price   // price := 50.00
+```
+
+Nothing has to migrate. `Amount` keeps the meaning it always had and is
+not deprecated in this release.
+
 ## Install
 
 ```bash
