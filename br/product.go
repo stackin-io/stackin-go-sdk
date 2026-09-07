@@ -1,5 +1,7 @@
 package br
 
+import "strconv"
+
 type PresumedCredit struct {
 	Code       string  `json:"code"`
 	Percentage float64 `json:"percentage"`
@@ -9,6 +11,7 @@ type PresumedCredit struct {
 type Product struct {
 	Description       string
 	Amount            float64
+	UnitPrice         *float64
 	Unit              string
 	Quantity          float64
 	Barcode           *string
@@ -92,14 +95,23 @@ func (p Product) ToDict() map[string]any {
 
 	result := map[string]any{
 		"description":  p.Description,
-		"amount":       p.Amount,
 		"product":      data,
 		"tax_retained": p.TaxRetained,
+	}
+	if p.Amount != 0 {
+		result["amount"] = decimalString(p.Amount)
+	}
+	if p.UnitPrice != nil {
+		result["unit_price"] = decimalString(*p.UnitPrice)
 	}
 	setIfNotNil(result, "service_code", p.ServiceCode)
 	setIfNotNil(result, "discount", p.ServiceDiscount)
 	setIfNotNil(result, "observations", p.Observations)
 	return result
+}
+
+func decimalString(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
 func setIfNotNil[T any](m map[string]any, key string, v *T) {
