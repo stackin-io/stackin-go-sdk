@@ -15,7 +15,7 @@ func TestProductToDictMinimal(t *testing.T) {
 
 	want := map[string]any{
 		"description":  "Servico basico",
-		"amount":       100.0,
+		"amount":       "100",
 		"product":      map[string]any{"unit": "UN", "quantity": 1.0, "used_movable_asset": false},
 		"tax_retained": false,
 	}
@@ -258,5 +258,62 @@ func TestProductToDictRemainingBRFields(t *testing.T) {
 	}
 	if brData["recopi_number"] != "00000000000012345678" {
 		t.Errorf("recopi_number = %v", brData["recopi_number"])
+	}
+}
+
+func TestUnitPriceIsSentWhenGiven(t *testing.T) {
+	price := 120.00
+	product := Product{
+		Description: "Teclado",
+		Quantity:    2,
+		UnitPrice:   &price,
+		Unit:        "UN",
+	}
+
+	data := product.ToDict()
+
+	if data["unit_price"] != "120" {
+		t.Errorf("unit_price = %v, want 120", data["unit_price"])
+	}
+	if _, ok := data["amount"]; ok {
+		t.Errorf("amount should be absent, got %v", data["amount"])
+	}
+}
+
+func TestTheLegacyLineStillSendsATotal(t *testing.T) {
+	product := Product{Description: "Servico", Amount: 100.00}
+
+	data := product.ToDict()
+
+	if data["amount"] != "100" {
+		t.Errorf("amount = %v, want 100", data["amount"])
+	}
+	if _, ok := data["unit_price"]; ok {
+		t.Errorf("unit_price should be absent, got %v", data["unit_price"])
+	}
+}
+
+func TestTheTenthPlaceSurvivesTheWire(t *testing.T) {
+	price := 0.0000000001
+	product := Product{Description: "Granel", Quantity: 1, UnitPrice: &price}
+
+	if got := product.ToDict()["unit_price"]; got != "0.0000000001" {
+		t.Errorf("unit_price = %v, want 0.0000000001", got)
+	}
+}
+
+func TestBothMayBeSentWhenTheyAgree(t *testing.T) {
+	price := 120.00
+	product := Product{
+		Description: "Teclado",
+		Quantity:    2,
+		UnitPrice:   &price,
+		Amount:      240.00,
+	}
+
+	data := product.ToDict()
+
+	if data["unit_price"] != "120" || data["amount"] != "240" {
+		t.Errorf("got %v / %v", data["unit_price"], data["amount"])
 	}
 }
