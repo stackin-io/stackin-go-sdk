@@ -8,6 +8,27 @@ type PresumedCredit struct {
 	Amount     float64 `json:"amount"`
 }
 
+type IbsCbs struct {
+	CST            string
+	Classification string
+	Base           *float64
+	RateState      float64
+	RateCity       float64
+	RateFederal    float64
+}
+
+func (g IbsCbs) toMap() map[string]any {
+	data := map[string]any{
+		"cst":            g.CST,
+		"classification": g.Classification,
+		"rate_state":     g.RateState,
+		"rate_city":      g.RateCity,
+		"rate_federal":   g.RateFederal,
+	}
+	setIfNotNil(data, "base", g.Base)
+	return data
+}
+
 type Product struct {
 	Description       string
 	Amount            float64
@@ -36,6 +57,7 @@ type Product struct {
 	RecopiNumber               *string
 	ExtraGroups                map[string]any
 	Tax                        *Tax
+	IbsCbs                     *IbsCbs
 
 	ServiceCode     *string  // LC 116/2003 item.subitem, nfse only
 	ServiceDiscount *float64 // unconditional discount, nfse only
@@ -84,6 +106,9 @@ func (p Product) ToDict() map[string]any {
 	setIfNotNil(br, "recopi_number", p.RecopiNumber)
 	if p.Tax != nil {
 		br["tax"] = p.Tax.ToDict()
+	}
+	if p.IbsCbs != nil {
+		br["ibs_cbs"] = p.IbsCbs.toMap()
 	}
 	for k, v := range p.ExtraGroups {
 		br[k] = v
