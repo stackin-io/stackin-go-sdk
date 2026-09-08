@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description: "Technical consulting - 10 hours",
-		Amount:      1500.00,
+		UnitPrice:   ptr(1500.00),
 		ServiceCode: ptr("1.06"),
 	}
 

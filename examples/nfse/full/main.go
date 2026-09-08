@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description:     "Software licensing",
-		Amount:          1200.00,
+		UnitPrice:       ptr(1200.00),
 		ServiceCode:     ptr("1.05"),
 		ServiceDiscount: ptr(100.00),
 		TaxRetained:     true,

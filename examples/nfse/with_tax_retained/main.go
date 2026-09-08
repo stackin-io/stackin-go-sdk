@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description: "UI/UX design",
-		Amount:      3200.00,
+		UnitPrice:   ptr(3200.00),
 		ServiceCode: ptr("1.03"),
 		TaxRetained: true,
 	}

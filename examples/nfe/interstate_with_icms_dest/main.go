@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description: "Urso de Pelucia Dudu",
-		Amount:      92.72,
+		UnitPrice:   ptr(92.72),
 		NCM:         ptr("95030031"),
 		CFOP:        ptr("6108"),
 		Freight:     ptr(9.12),

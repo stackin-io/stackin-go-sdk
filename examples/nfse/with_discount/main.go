@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description:     "Monthly support and maintenance",
-		Amount:          800.00,
+		UnitPrice:       ptr(800.00),
 		ServiceCode:     ptr("1.07"),
 		ServiceDiscount: ptr(50.00),
 	}

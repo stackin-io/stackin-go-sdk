@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description: "Produto com codigo de barras",
-		Amount:      29.90,
+		UnitPrice:   ptr(29.90),
 		NCM:         ptr("21069090"),
 		CFOP:        ptr("5102"),
 		Barcode:     ptr("7891000100103"),

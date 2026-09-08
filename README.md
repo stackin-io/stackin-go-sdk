@@ -77,7 +77,7 @@ func main() {
 		ClientName:   "John Doe",
 		TaxID:        "00000000000",
 		Items: []br.Product{
-			{Description: "Software development", Amount: 5000.00},
+			{Description: "Software development", UnitPrice: ptr(5000.00)},
 		},
 	})
 

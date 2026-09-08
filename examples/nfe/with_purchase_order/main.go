@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description:       "Produto vinculado a pedido de compra",
-		Amount:            75.00,
+		UnitPrice:         ptr(75.00),
 		NCM:               ptr("84433210"),
 		CFOP:              ptr("5102"),
 		PurchaseOrder:     ptr("PC-2026-00042"),

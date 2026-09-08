@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description: "Rosa Holambra Vermelha",
-		Amount:      112.44,
+		UnitPrice:   ptr(112.44),
 		NCM:         ptr("06031100"),
 		CFOP:        ptr("6108"),
 		Quantity:    6,

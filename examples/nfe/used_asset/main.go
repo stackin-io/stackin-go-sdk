@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description:      "Bem movel usado",
-		Amount:           500.00,
+		UnitPrice:        ptr(500.00),
 		NCM:              ptr("87032310"),
 		CFOP:             ptr("5102"),
 		UsedMovableAsset: true,

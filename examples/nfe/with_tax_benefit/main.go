@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description:    "Produto com beneficio fiscal",
-		Amount:         80.00,
+		UnitPrice:      ptr(80.00),
 		NCM:            ptr("22021000"),
 		CFOP:           ptr("5102"),
 		CEST:           ptr("0300700"),

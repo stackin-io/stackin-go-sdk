@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description: "Plastico celofane 50x50",
-		Amount:      0.27,
+		UnitPrice:   ptr(0.27),
 		NCM:         ptr("39202019"),
 		CFOP:        ptr("6108"),
 		Freight:     ptr(0.03),

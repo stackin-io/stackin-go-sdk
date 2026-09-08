@@ -10,13 +10,17 @@ import (
 	"github.com/stackin-io/stackin-go-sdk/br"
 )
 
+func ptr[T any](value T) *T {
+	return &value
+}
+
 func main() {
 	godotenv.Load()
 	client := stackin.NewInvoice(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
 
 	product := br.Product{
 		Description: "Software development SDK Go",
-		Amount:      5000.00,
+		UnitPrice:   ptr(5000.00),
 	}
 
 	result, err := client.Issue(stackin.IssueRequest{

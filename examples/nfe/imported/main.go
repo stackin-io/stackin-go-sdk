@@ -20,7 +20,7 @@ func main() {
 
 	product := br.Product{
 		Description:                "Produto importado",
-		Amount:                     320.00,
+		UnitPrice:                  ptr(320.00),
 		NCM:                        ptr("85171231"),
 		CFOP:                       ptr("5102"),
 		ExTipi:                     ptr("01"),
