@@ -317,3 +317,61 @@ func TestBothMayBeSentWhenTheyAgree(t *testing.T) {
 		t.Errorf("got %v / %v", data["unit_price"], data["amount"])
 	}
 }
+
+func TestIbsCbsNestsUnderBr(t *testing.T) {
+	product := Product{
+		Description: "Teclado",
+		Quantity:    2,
+		NCM:         ptrTest("84716052"),
+		CFOP:        ptrTest("5102"),
+		IbsCbs: &IbsCbs{
+			CST:            "000",
+			Classification: "000001",
+			RateState:      0.1,
+			RateCity:       0.0,
+			RateFederal:    0.9,
+		},
+	}
+
+	data := product.ToDict()
+	br, ok := data["product"].(map[string]any)["br"].(map[string]any)
+	if !ok {
+		t.Fatalf("br group missing: %v", data["product"])
+	}
+	group, ok := br["ibs_cbs"].(map[string]any)
+	if !ok {
+		t.Fatalf("ibs_cbs missing: %v", br)
+	}
+	if group["cst"] != "000" || group["classification"] != "000001" {
+		t.Errorf("got %v", group)
+	}
+	if _, present := group["base"]; present {
+		t.Errorf("base should be absent when not given, got %v", group["base"])
+	}
+}
+
+func TestIbsCbsCarriesAnExplicitBase(t *testing.T) {
+	base := 100.0
+	product := Product{
+		Description: "Teclado",
+		IbsCbs:      &IbsCbs{CST: "000", Classification: "000001", Base: &base},
+	}
+
+	br := product.ToDict()["product"].(map[string]any)["br"].(map[string]any)
+
+	if br["ibs_cbs"].(map[string]any)["base"] != 100.0 {
+		t.Errorf("got %v", br["ibs_cbs"])
+	}
+}
+
+func TestAnItemWithoutIbsCbsSendsNothing(t *testing.T) {
+	product := Product{Description: "Teclado", Amount: 10.0}
+
+	if _, present := product.ToDict()["product"].(map[string]any)["br"]; present {
+		t.Errorf("br group should be absent")
+	}
+}
+
+func ptrTest[T any](value T) *T {
+	return &value
+}
