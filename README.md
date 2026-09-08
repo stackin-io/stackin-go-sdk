@@ -130,7 +130,7 @@ result, err := inv.Issue(stackin.IssueRequest{
 	DocumentType:   stackin.NFSE,
 	ClientName:     "Maria Silva",
 	TaxID:          "12345678909",
-	Items:          []br.Product{{Description: "Consultoria", Amount: 1500.00}},
+	Items:          []br.Product{{Description: "Consultoria", UnitPrice: ptr(1500.00)}},
 	IdempotencyKey: key,
 })
 ```
