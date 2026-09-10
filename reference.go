@@ -2,9 +2,21 @@ package stackin
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 )
+
+// segment escapes one path segment, refusing the ones that would leave
+// it. url.PathEscape leaves "." alone — RFC 3986 calls it unreserved —
+// so the dot segments have to be refused rather than escaped, or the
+// HTTP client collapses ".." into a different endpoint.
+func segment(value string) (string, error) {
+	if value == "" || value == "." || value == ".." {
+		return "", &InvoiceError{Message: fmt.Sprintf("%q is not a usable path segment", value)}
+	}
+	return url.PathEscape(value), nil
+}
 
 // Kinds are the classifications with a named accessor on
 // FiscalReference. It is not the whole truth and is not meant to be:
@@ -45,10 +57,19 @@ type Kind struct {
 // Get returns one code. A code that does not exist is a 404, which
 // arrives as *APIError — there is no separate not-found type.
 func (k *Kind) Get(code string, country ...string) (map[string]any, error) {
+	name, err := segment(k.Name)
+	if err != nil {
+		return nil, err
+	}
+	escaped, err := segment(code)
+	if err != nil {
+		return nil, err
+	}
+
 	params := url.Values{}
 	params.Set("country", pickCountry(k.Country, country))
 
-	return k.client.request("GET", "/fiscal-references/"+k.Name+"/"+code, nil, params)
+	return k.client.request("GET", "/fiscal-references/"+name+"/"+escaped, nil, params)
 }
 
 // Search returns a page of this classification, filtered by the query's

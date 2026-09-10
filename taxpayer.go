@@ -26,8 +26,13 @@ func NewTaxpayer(opts ...Option) *Taxpayer {
 // last few weeks is simply not in it yet. Never build a validation
 // rule on top of it.
 func (t *Taxpayer) Get(taxID string, country ...string) (map[string]any, error) {
+	escaped, err := segment(taxID)
+	if err != nil {
+		return nil, err
+	}
+
 	params := url.Values{}
 	params.Set("country", pickCountry(t.Country, country))
 
-	return t.request("GET", "/taxpayers/"+taxID, nil, params)
+	return t.request("GET", "/taxpayers/"+escaped, nil, params)
 }
