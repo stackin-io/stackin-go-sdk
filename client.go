@@ -30,43 +30,67 @@ var environmentURLs = map[Environment]string{
 	Production: DefaultBaseURL,
 }
 
-type Invoice struct {
-	BaseURL    string
-	APIKey     string
-	Timeout    time.Duration
+// transport is where an API key becomes an HTTP call. Invoice,
+// FiscalReference and Taxpayer all embed it, so one option type
+// configures every entry point and one code path issues every request.
+type transport struct {
+	BaseURL string
+	APIKey  string
+	Timeout time.Duration
+
+	// Country is read by FiscalReference and Taxpayer only. Invoice
+	// embeds it and ignores it: a fiscal document carries its issuer's
+	// country already.
+	Country string
+
 	httpClient *http.Client
 }
 
-type Option func(*Invoice)
+type Invoice struct {
+	transport
+}
+
+type Option func(*transport)
 
 func WithBaseURL(baseURL string) Option {
-	return func(i *Invoice) { i.BaseURL = baseURL }
+	return func(t *transport) { t.BaseURL = baseURL }
 }
 
 func WithEnvironment(env Environment) Option {
-	return func(i *Invoice) { i.BaseURL = environmentURLs[env] }
+	return func(t *transport) { t.BaseURL = environmentURLs[env] }
 }
 
 func WithAPIKey(apiKey string) Option {
-	return func(i *Invoice) { i.APIKey = apiKey }
+	return func(t *transport) { t.APIKey = apiKey }
 }
 
 func WithTimeout(timeout time.Duration) Option {
-	return func(i *Invoice) { i.Timeout = timeout }
+	return func(t *transport) { t.Timeout = timeout }
 }
 
-func NewInvoice(opts ...Option) *Invoice {
-	i := &Invoice{
+// WithCountry sets the ISO 3166-1 alpha-2 code FiscalReference and
+// Taxpayer look codes up under. Defaults to BR.
+func WithCountry(country string) Option {
+	return func(t *transport) { t.Country = country }
+}
+
+func newTransport(opts ...Option) transport {
+	t := transport{
 		BaseURL: resolveBaseURL(),
 		APIKey:  os.Getenv("STACKIN_API_KEY"),
 		Timeout: 30 * time.Second,
+		Country: "BR",
 	}
 	for _, opt := range opts {
-		opt(i)
+		opt(&t)
 	}
-	i.BaseURL = strings.TrimRight(i.BaseURL, "/")
-	i.httpClient = &http.Client{Timeout: i.Timeout}
-	return i
+	t.BaseURL = strings.TrimRight(t.BaseURL, "/")
+	t.httpClient = &http.Client{Timeout: t.Timeout}
+	return t
+}
+
+func NewInvoice(opts ...Option) *Invoice {
+	return &Invoice{transport: newTransport(opts...)}
 }
 
 func resolveBaseURL() string {
@@ -373,7 +397,7 @@ func (inv *Invoice) Submissions(invoiceID string) ([]map[string]any, error) {
 	return parsed, nil
 }
 
-func (inv *Invoice) request(method, path string, payload any, params url.Values, opts ...RequestOption) (map[string]any, error) {
+func (inv *transport) request(method, path string, payload any, params url.Values, opts ...RequestOption) (map[string]any, error) {
 	raw, err := inv.send(method, path, payload, params, opts...)
 	if err != nil {
 		return nil, err
@@ -389,7 +413,7 @@ func (inv *Invoice) request(method, path string, payload any, params url.Values,
 	return parsed, nil
 }
 
-func (inv *Invoice) send(method, path string, payload any, params url.Values, opts ...RequestOption) ([]byte, error) {
+func (inv *transport) send(method, path string, payload any, params url.Values, opts ...RequestOption) ([]byte, error) {
 	var cfg requestConfig
 	for _, opt := range opts {
 		opt(&cfg)
