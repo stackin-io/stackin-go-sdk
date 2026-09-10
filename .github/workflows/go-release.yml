@@ -2,9 +2,20 @@ name: 📦 Release MOD
 
 # Go has no registry to push to: the module proxy resolves straight from the
 # tag. So this does not publish — it makes the release reproducible. It
-# refuses a tag that disagrees with LAST_VERSION, runs the same tests and
-# lint the branch runs, and then asks the proxy for the version so the first
-# `go get` after a release is not the one paying to warm the cache.
+# writes LAST_VERSION from the tag, runs the same tests and lint the branch
+# runs, and then asks the proxy for the version so the first `go get` after
+# a release is not the one paying to warm the cache.
+#
+# It used to *verify* LAST_VERSION instead, which made every release a
+# two-step ritual — bump, push, then tag — and three releases in a row
+# failed because the tag came first. Deriving it from the tag is what the
+# Python SDK does, and there is one source of truth either way.
+#
+# What this cannot fix, and nobody should expect it to: the commit lands
+# after the tag, so the tag itself still carries the previous
+# LAST_VERSION. For Go that is cosmetic — the proxy serves the tagged
+# commit and nothing reads LAST_VERSION at build time — but it is why the
+# file is a record of the last release, not of the tagged tree.
 
 on:
   release:
@@ -17,57 +28,70 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  verify-version:
-    name: Verify the tag matches LAST_VERSION
+  update-version:
+    name: Write LAST_VERSION from the tag
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout code
+      - name: 📥 Checkout the default branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
 
-      - name: 🔍 Compare tag against LAST_VERSION
+      - name: 🔍 Extract version from tag
+        id: version
         run: |
           TAG="${{ github.event.release.tag_name || inputs.tag }}"
-          VERSION="${TAG#v}"
-          DECLARED="$(tr -d '[:space:]' < LAST_VERSION)"
-
-          echo "tag:          $TAG"
-          echo "LAST_VERSION: $DECLARED"
-
-          if [ "$VERSION" != "$DECLARED" ]; then
-            echo "::error::Tag $TAG says $VERSION but LAST_VERSION says $DECLARED."
-            echo "::error::Update LAST_VERSION and re-tag — the proxy serves the tag forever."
-            exit 1
-          fi
 
           if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::The Go proxy needs a semver tag prefixed with v, got $TAG."
             exit 1
           fi
 
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "tag $TAG -> ${TAG#v}"
+
+      - name: 📝 Write LAST_VERSION
+        run: echo "${{ steps.version.outputs.version }}" > LAST_VERSION
+
+      - name: 💾 Commit and push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add LAST_VERSION
+
+          if git diff --staged --quiet; then
+            echo "LAST_VERSION already says this version"
+            exit 0
+          fi
+
+          git commit -m "📦 MOD: Update version to ${{ steps.version.outputs.version }}"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
+
   test:
     name: Run Tests
-    needs: [verify-version]
+    needs: [update-version]
     uses: ./.github/workflows/test.yml
     secrets: inherit
 
   code-quality:
     name: Code Quality Checks
-    needs: [verify-version]
+    needs: [update-version]
     uses: ./.github/workflows/code-quality.yml
     secrets: inherit
 
   integration:
     name: Issue a real document
-    needs: [verify-version, test, code-quality]
+    needs: [update-version, test, code-quality]
     uses: ./.github/workflows/integration.yml
     secrets: inherit
 
   warm-proxy:
     name: Warm the module proxy
-    needs: [verify-version, test, code-quality, integration]
+    needs: [update-version, test, code-quality, integration]
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout code
