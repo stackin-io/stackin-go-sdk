@@ -248,6 +248,35 @@ Realizada. Only the last one takes a reason, and it requires one — both rules 
 checked locally, before the request goes out, because a round trip to be told a
 fixed rule is a round trip wasted.
 
+## Looking up a code, or who a CNPJ belongs to
+
+Two more clients, for the tables an issuer reads while filling a document. Neither writes anything.
+
+```go
+ref := stackin.NewFiscalReference(stackin.WithAPIKey("..."))   // country BR by default
+
+ref.NCM.Get("84716052")                                        // one code
+ref.NCM.Search(stackin.SearchQuery{Term: "teclado", Limit: 5}) // a page of matches
+ref.CFOP.Get("5102")
+ref.Kinds()                                                    // what this country has
+ref.Kind("ibs_cbs_class").Get("000001")                        // any kind, named or not
+ref.Search(stackin.SearchQuery{Term: "teclado"})               // every kind at once
+
+stackin.NewTaxpayer(stackin.WithAPIKey("...")).Get("00000000000191")
+```
+
+`CFOP`, `NCM`, `CEST`, `CST`, `CSOSN`, `IssService`, `IcmsFuel` and `IbsCbsClass` have accessors. **`Kind(name)` reaches anything else**, including a classification published after this release — ask `Kinds()` rather than trusting this list.
+
+`metadata` comes back as the API sends it and differs per kind: `utrib` on an NCM, `ncm_code` on a CEST, `tax_type` on a CST, `nil` on an ISS service.
+
+Three things worth knowing before you loop:
+
+- **These share the invoice read allowance** — 600 calls a minute per key, the same bucket `Consult`, `History` and `Pdf` draw from. One `Search` page beats N `Get` calls.
+- **Ordering is fixed** (kind, then code, ascending). Unlike `History`, `SearchQuery` has no `SortBy`/`OrderBy`.
+- **A 404 from `Taxpayer` does not mean the company does not exist.** That registry reloads monthly, so a recently registered CNPJ is simply not in it yet. Do not build a validation rule on it.
+
+`Taxpayer` has one method and keeps one: the registry holds the names and addresses of real people, so there is no search over it, by design.
+
 ## Errors
 
 - `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated.
@@ -258,4 +287,4 @@ Building the full fiscal document (issuer data, service code, tax groups, schema
 
 ## Examples
 
-Runnable end-to-end programs in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one program per field variant, from the bare minimum to every field filled. `examples/consult_invoice/`, `examples/cancel_invoice/`, and `examples/reissue_invoice/` cover the operations that act on an already-issued document.
+Runnable end-to-end programs in [`examples/nfe/`](examples/nfe/) and [`examples/nfse/`](examples/nfse/) — one program per field variant, from the bare minimum to every field filled. `examples/consult_invoice/`, `examples/cancel_invoice/`, and `examples/reissue_invoice/` cover the operations that act on an already-issued document. `examples/lookup_fiscal_reference/` and `examples/lookup_taxpayer/` cover the two read-only clients.
