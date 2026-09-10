@@ -271,7 +271,7 @@ stackin.NewTaxpayer(stackin.WithAPIKey("...")).Get("00000000000191")
 
 Three things worth knowing before you loop:
 
-- **These share the invoice read allowance** — 600 calls a minute per key, the same bucket `Consult`, `History` and `Pdf` draw from. One `Search` page beats N `Get` calls.
+- **These share the invoice read allowance** — 600 calls a minute per key, the same bucket `Consult`, `History`, `Received` and `Pdf` draw from. One `Search` page beats N `Get` calls.
 - **Ordering is fixed** (kind, then code, ascending). Unlike `History`, `SearchQuery` has no `SortBy`/`OrderBy`.
 - **A 404 from `Taxpayer` does not mean the company does not exist.** That registry reloads monthly, so a recently registered CNPJ is simply not in it yet. Do not build a validation rule on it.
 
