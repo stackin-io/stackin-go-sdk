@@ -83,3 +83,24 @@ func TestTaxpayerDeclaresExactlyOneMethodOfItsOwn(t *testing.T) {
 		t.Errorf("public surface is %v, want [Get]", own)
 	}
 }
+
+// A CNPJ is displayed with a slash; it must not rewrite the path.
+func TestAFormattedCnpjStaysInsideItsSegment(t *testing.T) {
+	client, request := newTaxpayer(t, http.StatusOK, map[string]any{})
+
+	if _, err := client.Get("00.000.000/0001-91"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := request().URL.EscapedPath(); got != "/api/v1/taxpayers/00.000.000%2F0001-91" {
+		t.Errorf("path %q", got)
+	}
+}
+
+func TestAnEmptyTaxIDIsRefusedRatherThanDropped(t *testing.T) {
+	client := NewTaxpayer(WithAPIKey("k"))
+
+	if _, err := client.Get(""); err == nil {
+		t.Error("an empty tax id was accepted")
+	}
+}

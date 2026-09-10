@@ -190,3 +190,32 @@ func TestKindsAsksTheAPIRatherThanAnsweringFromTheSlice(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+// A code the caller types by hand must not rewrite the path.
+func TestASlashInACodeStaysInsideItsSegment(t *testing.T) {
+	client, request := newReference(t, map[string]any{})
+
+	if _, err := client.NCM.Get("8471/60/52"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := request().URL.EscapedPath(); got != "/api/v1/fiscal-references/ncm/8471%2F60%2F52" {
+		t.Errorf("path %q", got)
+	}
+}
+
+func TestAKindCannotClimbOutOfItsEndpoint(t *testing.T) {
+	client := NewFiscalReference(WithAPIKey("k"))
+
+	if _, err := client.Kind("..").Get("kinds"); err == nil {
+		t.Error("'..' was accepted as a kind")
+	}
+}
+
+func TestAnEmptyCodeIsRefusedRatherThanDropped(t *testing.T) {
+	client := NewFiscalReference(WithAPIKey("k"))
+
+	if _, err := client.NCM.Get(""); err == nil {
+		t.Error("an empty code was accepted")
+	}
+}
