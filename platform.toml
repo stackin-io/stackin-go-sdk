@@ -1,0 +1,12 @@
+[project]
+name = "stackin-go-sdk"
+type = "library"
+language = "go"
+
+[source_host]
+kind = "github"
+repo = "stackin-io/stackin-go-sdk"
+
+[release]
+strategy = "semver"
+changelog = "conventional"
