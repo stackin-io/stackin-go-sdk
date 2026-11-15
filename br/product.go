@@ -1,10 +1,6 @@
 package br
 
-import (
-	"errors"
-	"regexp"
-	"strconv"
-)
+import "strconv"
 
 type PresumedCredit struct {
 	Code       string  `json:"code"`
@@ -67,28 +63,6 @@ type Product struct {
 	ServiceDiscount *float64 // unconditional discount, nfse only
 	TaxRetained     bool     // ISSQN retained by the tomador, nfse only
 	Observations    *string  // nfse only
-}
-
-var barcodePattern = regexp.MustCompile(`^(SEM GTIN|\d{8}|\d{12,14})$`)
-
-// Validate checks the fields whose shape is fixed by the NF-e 4.00 schema,
-// whatever the document type. Barcode (cEAN) is either "SEM GTIN" or a
-// GTIN-8, -12, -13 or -14. Issue calls it for every item and returns the
-// failure as an *InvoiceError.
-func (p Product) Validate() error {
-	if p.Barcode != nil {
-		if err := validateBarcode(*p.Barcode); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateBarcode(barcode string) error {
-	if !barcodePattern.MatchString(barcode) {
-		return errors.New("barcode must be 'SEM GTIN' or a GTIN of 8, 12, 13 or 14 digits")
-	}
-	return nil
 }
 
 func (p Product) ToDict() map[string]any {
