@@ -175,3 +175,52 @@ func TestValidateProductRejectsMalformedBarcodes(t *testing.T) {
 		}
 	}
 }
+
+func TestIssueRejectsAShortNCM(t *testing.T) {
+	inv, hits := countingInvoice(t)
+	item := nfeItem()
+	ncm := "84"
+	item.NCM = &ncm
+
+	_, err := inv.Issue(nfeRequest(item))
+
+	wantInvoiceError(t, err, *hits, "items[0].ncm must be the full 8 digits, or 00 for a service line")
+}
+
+func TestIssueSendsAnEightDigitNCMOrTheServiceCode(t *testing.T) {
+	for _, ncm := range []string{"84713012", "00"} {
+		inv, hits := countingInvoice(t)
+		item := nfeItem()
+		item.NCM = &ncm
+
+		if _, err := inv.Issue(nfeRequest(item)); err != nil {
+			t.Fatalf("Issue(ncm=%q) = %v, want nil", ncm, err)
+		}
+		if *hits != 1 {
+			t.Errorf("hits = %d, want 1", *hits)
+		}
+	}
+}
+
+func TestValidateProductAcceptsAnEightDigitNCMOrTheServiceCode(t *testing.T) {
+	for _, ncm := range []string{"84713012", "00"} {
+		if err := validateProduct(br.Product{Description: "Notebook", NCM: ptr(ncm)}); err != nil {
+			t.Errorf("validateProduct(ncm=%q) = %v, want nil", ncm, err)
+		}
+	}
+}
+
+func TestValidateProductAcceptsAProductWithoutNCM(t *testing.T) {
+	if err := validateProduct(br.Product{Description: "Consultoria"}); err != nil {
+		t.Errorf("validateProduct() = %v, want nil", err)
+	}
+}
+
+func TestValidateProductRejectsAnyOtherNCM(t *testing.T) {
+	for _, ncm := range []string{"84", "12", "000", "8471", "8471301", "847130120", "8471301A", " 84713012"} {
+		err := validateProduct(br.Product{Description: "Notebook", NCM: ptr(ncm)})
+		if err == nil || err.Error() != "ncm must be the full 8 digits, or 00 for a service line" {
+			t.Errorf("validateProduct(ncm=%q) = %v, want the 8-digit error", ncm, err)
+		}
+	}
+}
