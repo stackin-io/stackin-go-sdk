@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.12.0 — 2026-11-15
+
+### Features
+- **client:** external_reference on Issue, CityCode optional on an NF-e address
+
+### Docs
+- **readme:** document ExternalReference and the optional CityCode
+
 ## v0.11.0 — 2026-11-15
 
 ### Features
