@@ -118,7 +118,11 @@ func main() {
 
 `Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
 
-- `Barcode` (cEAN), when it holds a GTIN of 8, 12, 13 or 14 digits, must carry the right GS1 check digit (a mistyped digit is caught here instead of by the SEFAZ). `SEM GTIN` skips the check.
+- `NCM`, when set, must be the full 8 digits, or `00` for a service line. Any other 2-digit chapter is not accepted: the SEFAZ rejects it with `777`.
+- `Barcode` (cEAN), when set, must be `SEM GTIN` or a GTIN of 8, 12, 13 or 14 digits, and a GTIN's GS1 check digit must be right (a mistyped digit is caught here instead of by the SEFAZ).
+- On NFE, an item's `Description` (xProd) is at most 120 characters. NFSE descriptions are not bound by it.
+- `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
+- On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, and every `RecipientAddress` field — is checked for characters the NF-e cannot carry. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and the error names the field and the character. Accented Portuguese and anything else in ISO-8859-1 (latin1) is fine; tabs and line breaks are collapsed into a space, and typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API (`‘ ’ ‚` to `'`, `“ ” „` to `"`, `– — −` and `•` to `-`, `…` to `...`, `€` to `EUR`, `™` to `TM`). The SDK sends them unchanged. NFSE is not checked.
 
 ## Retrying safely
 
