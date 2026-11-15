@@ -258,10 +258,16 @@ func (inv *Invoice) Invalidate(req InvalidationRequest) (map[string]any, error) 
 	return inv.request(http.MethodPost, "/invoices/invalidations", payload, nil)
 }
 
-var nfeAccessKeyPattern = regexp.MustCompile(`^\d{44}$`)
+// nfeAccessKeyPattern is the shape of an NF-e access key (44 characters).
+// Positions 7-18 carry the start of the issuer's CNPJ, which may be
+// alphanumeric (IN RFB 2.229/2024); the rest of the key is numeric. An
+// NFS-e key is 50 digits and never matches.
+var nfeAccessKeyPattern = regexp.MustCompile(`^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$`)
 
-// Correct files a correction letter (CC-e). NF-e only: the access key must
-// be the 44-digit NF-e key, checked before the call.
+// Correct files a correction letter (CC-e). NF-e only: a key that is not an
+// NF-e access key is refused before the call. A well-formed key sent with
+// NFSE, or one for a document the API does not hold, is answered 409 by the
+// API and comes back as an *APIError.
 func (inv *Invoice) Correct(accessKey string, documentType DocumentType, correction string) (map[string]any, error) {
 	if !nfeAccessKeyPattern.MatchString(accessKey) {
 		return nil, &InvoiceError{
