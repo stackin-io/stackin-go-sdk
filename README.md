@@ -118,6 +118,11 @@ func main() {
 
 `Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
 
+- `NCM`, when set, must be the full 8 digits, or `00` for a service line. Any other 2-digit chapter is not accepted: the SEFAZ rejects it with `777`.
+- `Barcode` (cEAN), when set, must be `SEM GTIN` or a GTIN of 8, 12, 13 or 14 digits, and a GTIN's GS1 check digit must be right (a mistyped digit is caught here instead of by the SEFAZ).
+- On NFE, an item's `Description` (xProd) is at most 120 characters. NFSE descriptions are not bound by it.
+- `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
+- On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, and every `RecipientAddress` field — is checked for characters the NF-e cannot carry. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and the error names the field and the character. Accented Portuguese and anything else in ISO-8859-1 (latin1) is fine; tabs and line breaks are collapsed into a space, and typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API (`‘ ’ ‚` to `'`, `“ ” „` to `"`, `– — −` and `•` to `-`, `…` to `...`, `€` to `EUR`, `™` to `TM`). The SDK sends them unchanged. NFSE is not checked.
 - On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress` with `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` (`CityCode` optional): the ISSQN is retained by the tomador, and the city authorizer refuses the document without their address (`E0237`).
 
 ## Retrying safely
@@ -179,7 +184,7 @@ result, err := inv.Correct(
 )
 ```
 
-The correction text is 15 to 1000 characters, checked locally before the call.
+The correction text is 15 to 1000 characters, and the access key must be an NF-e access key (44 characters) — both checked locally before the call. Any other key, an NFS-e's 50-digit one included, returns an `*InvoiceError`: NFS-e has no correction letter, so cancel and reissue instead.
 
 What a CC-e **cannot** fix: anything that changes the tax owed (base, rate,
 price, quantity, totals), the buyer or the seller, or the issue date. Those
@@ -190,8 +195,7 @@ The original document does not change — the CC-e is an event attached to it, a
 the authorized XML stays as it was. A document accepts at most 20 of them, and
 they are numbered for you.
 
-**NF-e only.** NFS-e has no correction letter, and asking for one returns
-a `409`.
+**NF-e only.** NFS-e has no correction letter. The key already says which one it is, so a key that is not an NF-e access key is refused locally with an `*InvoiceError`. What only the API can know stays an `*APIError` with status `409`: an NF-e-shaped key sent with `stackin.NFSE`, or a key for a document the API does not hold. The NF-e key is 44 characters: digits, except positions 7 to 18, which may carry the uppercase letters of an alphanumeric CNPJ.
 
 ## Invalidating unused numbers
 

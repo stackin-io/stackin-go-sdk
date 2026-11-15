@@ -551,7 +551,7 @@ func TestCorrectPostsToTheCorrectionPath(t *testing.T) {
 	defer server.Close()
 
 	inv := NewInvoice(WithBaseURL(server.URL))
-	result, err := inv.Correct("abc123", NFE, "Transportadora corrigida para Rapido Ltda")
+	result, err := inv.Correct(nfeAccessKey, NFE, "Transportadora corrigida para Rapido Ltda")
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -559,8 +559,8 @@ func TestCorrectPostsToTheCorrectionPath(t *testing.T) {
 	if gotMethod != http.MethodPost {
 		t.Errorf("method = %q, want POST", gotMethod)
 	}
-	if gotPath != "/api/v1/invoices/abc123/correction" {
-		t.Errorf("path = %q, want /api/v1/invoices/abc123/correction", gotPath)
+	if gotPath != "/api/v1/invoices/"+nfeAccessKey+"/correction" {
+		t.Errorf("path = %q, want /api/v1/invoices/%s/correction", gotPath, nfeAccessKey)
 	}
 	if gotBody["document_type"] != "nfe" {
 		t.Errorf("document_type = %v, want nfe", gotBody["document_type"])
@@ -581,7 +581,7 @@ func TestCorrectRejectsTextOutsideTheAllowedLength(t *testing.T) {
 	inv := NewInvoice(WithBaseURL(server.URL))
 
 	for _, correction := range []string{"curto demais", strings.Repeat("a", 1001)} {
-		_, err := inv.Correct("abc123", NFE, correction)
+		_, err := inv.Correct(nfeAccessKey, NFE, correction)
 
 		var invErr *InvoiceError
 		if !errors.As(err, &invErr) {

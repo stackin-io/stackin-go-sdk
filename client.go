@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -209,9 +210,89 @@ func validateNFEAddress(address *Address) error {
 	return nil
 }
 
+// apiConvertedRunes are the characters above U+00FF the API rewrites to a
+// Latin-1 spelling before building the NF-e (quotes, dashes, ellipsis,
+// bullet, euro and trademark signs). The SDK sends them as they are.
+var apiConvertedRunes = map[rune]bool{
+	'\u2018': true, '\u2019': true, '\u201a': true, // ‘ ’ ‚ -> '
+	'\u201c': true, '\u201d': true, '\u201e': true, // “ ” „ -> "
+	'\u2013': true, '\u2014': true, '\u2212': true, // – — − -> -
+	'\u2026': true, // … -> ...
+	'\u2022': true, // • -> -
+	'\u20ac': true, // € -> EUR
+	'\u2122': true, // ™ -> TM
+}
+
+// validateLatin1 rejects the first free-text field of an NF-e payload
+// holding a character the NF-e cannot carry: anything above U+00FF
+// (ISO-8859-1) that the API does not convert itself. Whitespace such as
+// tabs and newlines is collapsed by the API and passes. Paths name the
+// payload keys sent.
+func validateLatin1(req IssueRequest) error {
+	type field struct {
+		path  string
+		value string
+	}
+	fields := []field{{"client_name", req.ClientName}}
+	for i, item := range req.Items {
+		prefix := fmt.Sprintf("items[%d].", i)
+		fields = append(fields,
+			field{prefix + "description", item.Description},
+			field{prefix + "product.unit", item.Unit},
+			field{prefix + "product.purchase_order", deref(item.PurchaseOrder)},
+			field{prefix + "product.purchase_order_item", deref(item.PurchaseOrderItem)},
+			field{prefix + "observations", deref(item.Observations)},
+		)
+	}
+	if a := req.RecipientAddress; a != nil {
+		fields = append(fields,
+			field{"recipient_address.street", a.Street},
+			field{"recipient_address.number", a.Number},
+			field{"recipient_address.neighborhood", a.Neighborhood},
+			field{"recipient_address.city", a.City},
+			field{"recipient_address.state", a.State},
+			field{"recipient_address.zip_code", a.ZipCode},
+			field{"recipient_address.city_code", a.CityCode},
+		)
+	}
+	for _, f := range fields {
+		for _, r := range f.value {
+			if r > 0xFF && !apiConvertedRunes[r] {
+				return &InvoiceError{Message: fmt.Sprintf(
+					"%s contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '%c'",
+					f.path, r,
+				)}
+			}
+		}
+	}
+	return nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// nfeDescriptionLimit is xProd's maximum length in the NF-e 4.00 schema.
+// NFS-e descriptions are not bound by it.
+const nfeDescriptionLimit = 120
+
 func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	if len(req.Items) == 0 {
 		return nil, &InvoiceError{Message: "items can't be empty"}
+	}
+
+	for i, item := range req.Items {
+		if err := validateProduct(item); err != nil {
+			return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].%s", i, err.Error())}
+		}
+	}
+	if req.RecipientAddress != nil {
+		if err := req.RecipientAddress.validate(); err != nil {
+			return nil, &InvoiceError{Message: "recipient_address." + err.Error()}
+		}
 	}
 
 	if req.DocumentType == NFE {
@@ -222,8 +303,16 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 			if item.CFOP == nil || *item.CFOP == "" {
 				return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].cfop is required for NFE", i)}
 			}
+			if len([]rune(item.Description)) > nfeDescriptionLimit {
+				return nil, &InvoiceError{Message: fmt.Sprintf(
+					"items[%d].description exceeds %d characters (NF-e xProd limit)", i, nfeDescriptionLimit,
+				)}
+			}
 		}
 		if err := validateNFEAddress(req.RecipientAddress); err != nil {
+			return nil, err
+		}
+		if err := validateLatin1(req); err != nil {
 			return nil, err
 		}
 	}
@@ -300,7 +389,22 @@ func (inv *Invoice) Invalidate(req InvalidationRequest) (map[string]any, error) 
 	return inv.request(http.MethodPost, "/invoices/invalidations", payload, nil)
 }
 
+// nfeAccessKeyPattern is the shape of an NF-e access key (44 characters).
+// Positions 7-18 carry the start of the issuer's CNPJ, which may be
+// alphanumeric (IN RFB 2.229/2024); the rest of the key is numeric. An
+// NFS-e key is 50 digits and never matches.
+var nfeAccessKeyPattern = regexp.MustCompile(`^[0-9]{6}[0-9A-Z]{12}[0-9]{26}$`)
+
+// Correct files a correction letter (CC-e). NF-e only: a key that is not an
+// NF-e access key is refused before the call. A well-formed key sent with
+// NFSE, or one for a document the API does not hold, is answered 409 by the
+// API and comes back as an *APIError.
 func (inv *Invoice) Correct(accessKey string, documentType DocumentType, correction string) (map[string]any, error) {
+	if !nfeAccessKeyPattern.MatchString(accessKey) {
+		return nil, &InvoiceError{
+			Message: "Correct is NFe only. NFSe has no correction letter — cancel and reissue instead.",
+		}
+	}
 	length := len([]rune(correction))
 	if length < 15 || length > 1000 {
 		return nil, &InvoiceError{Message: "correction must be 15 to 1000 characters"}
