@@ -235,7 +235,7 @@ func TestProductToDictRemainingBRFields(t *testing.T) {
 		TaxBenefitCode:             ptr("PR820001"),
 		ExTipi:                     ptr("01"),
 		ImportContentControlNumber: ptr("550E8400-E29B-41D4-A716-446655440000"),
-		RecopiNumber:               ptr("00000000000012345678"),
+		RecopiNumber:               ptr("20131106114609734393"),
 	}
 	data := p.ToDict()
 	product := data["product"].(map[string]any)
@@ -256,7 +256,7 @@ func TestProductToDictRemainingBRFields(t *testing.T) {
 	if brData["import_content_control_number"] != "550E8400-E29B-41D4-A716-446655440000" {
 		t.Errorf("import_content_control_number = %v", brData["import_content_control_number"])
 	}
-	if brData["recopi_number"] != "00000000000012345678" {
+	if brData["recopi_number"] != "20131106114609734393" {
 		t.Errorf("recopi_number = %v", brData["recopi_number"])
 	}
 }
