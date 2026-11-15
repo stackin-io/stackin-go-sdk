@@ -67,24 +67,19 @@ func TestIssueRejectsNonLatin1TextOnNFE(t *testing.T) {
 			"items[0].description contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '💻'",
 		},
 		{
-			"curly quote in client name",
-			func(r *IssueRequest) { r.ClientName = "Acme “Ltda”" },
-			"client_name contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '“'",
+			"CJK in client name",
+			func(r *IssueRequest) { r.ClientName = "Acme 中 Ltda" },
+			"client_name contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '中'",
 		},
 		{
-			"en dash in street",
-			func(r *IssueRequest) { r.RecipientAddress.Street = "Rua A – Bloco B" },
-			"recipient_address.street contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '–'",
+			"Cyrillic in street",
+			func(r *IssueRequest) { r.RecipientAddress.Street = "Rua Ж" },
+			"recipient_address.street contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: 'Ж'",
 		},
 		{
-			"tab in unit",
-			func(r *IssueRequest) { r.Items[0].Unit = "U\tN" },
-			"items[0].product.unit contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '\t'",
-		},
-		{
-			"euro sign in purchase order",
-			func(r *IssueRequest) { po := "PO-€1"; r.Items[0].PurchaseOrder = &po },
-			"items[0].product.purchase_order contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '€'",
+			"emoji in purchase order",
+			func(r *IssueRequest) { po := "PO-🔥"; r.Items[0].PurchaseOrder = &po },
+			"items[0].product.purchase_order contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '🔥'",
 		},
 	}
 	for _, tc := range cases {
@@ -106,6 +101,23 @@ func TestIssueAcceptsLatin1AccentsOnNFE(t *testing.T) {
 	req.ClientName = "Pão de Açúcar Comércio Ltda"
 	req.Items[0].Description = "Café torrado ÿ ½ ©"
 	req.RecipientAddress.Neighborhood = "São João"
+
+	if _, err := inv.Issue(req); err != nil {
+		t.Fatalf("Issue() = %v, want nil", err)
+	}
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1", *hits)
+	}
+}
+
+func TestIssueLeavesWhatTheAPIConvertsOnNFE(t *testing.T) {
+	inv, hits := countingInvoice(t)
+	req := nfeRequest(nfeItem())
+	req.Items[0].Description = "“Teclado” — 2 un… €10™"
+	req.Items[0].Unit = "a\tb\nc"
+	obs := "‘a’ ‚b „c” – − • é ç ã\r\n"
+	req.Items[0].Observations = &obs
+	req.ClientName = "é ç ã"
 
 	if _, err := inv.Issue(req); err != nil {
 		t.Fatalf("Issue() = %v, want nil", err)

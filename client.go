@@ -171,9 +171,24 @@ func validateNFEAddress(address *Address) error {
 	return nil
 }
 
+// apiConvertedRunes are the characters above U+00FF the API rewrites to a
+// Latin-1 spelling before building the NF-e (quotes, dashes, ellipsis,
+// bullet, euro and trademark signs). The SDK sends them as they are.
+var apiConvertedRunes = map[rune]bool{
+	'\u2018': true, '\u2019': true, '\u201a': true, // ‘ ’ ‚ -> '
+	'\u201c': true, '\u201d': true, '\u201e': true, // “ ” „ -> "
+	'\u2013': true, '\u2014': true, '\u2212': true, // – — − -> -
+	'\u2026': true, // … -> ...
+	'\u2022': true, // • -> -
+	'\u20ac': true, // € -> EUR
+	'\u2122': true, // ™ -> TM
+}
+
 // validateLatin1 rejects the first free-text field of an NF-e payload
-// holding a character outside printable ISO-8859-1 (U+0020..U+00FF): the
-// NF-e accepts nothing else. Paths name the payload keys sent.
+// holding a character the NF-e cannot carry: anything above U+00FF
+// (ISO-8859-1) that the API does not convert itself. Whitespace such as
+// tabs and newlines is collapsed by the API and passes. Paths name the
+// payload keys sent.
 func validateLatin1(req IssueRequest) error {
 	type field struct {
 		path  string
@@ -203,7 +218,7 @@ func validateLatin1(req IssueRequest) error {
 	}
 	for _, f := range fields {
 		for _, r := range f.value {
-			if r < 0x20 || r > 0xFF {
+			if r > 0xFF && !apiConvertedRunes[r] {
 				return &InvoiceError{Message: fmt.Sprintf(
 					"%s contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '%c'",
 					f.path, r,
