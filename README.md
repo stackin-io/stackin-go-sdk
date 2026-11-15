@@ -112,7 +112,7 @@ func main() {
 }
 ```
 
-`RecipientAddress` is an `Address` — the buyer's address, **required for NFE** and ignored for NFSE. Every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address returns an `*InvoiceError` locally, before the request goes out.
+`RecipientAddress` is an `Address` — the buyer's address, **required for NFE**. On NFE every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. On NFSE it is the tomador's address: optional, except when any item has `TaxRetained` (the tomador withholds the ISSQN), where it is required with every field except `CityCode`. A missing or incomplete NFE address, or a missing or incomplete one on an NFSE with a retained item, returns an `*InvoiceError` locally, before the request goes out.
 
 ### Checked before the request goes out
 
@@ -123,6 +123,7 @@ func main() {
 - On NFE, an item's `Description` (xProd) is at most 120 characters. NFSE descriptions are not bound by it.
 - `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
 - On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, and every `RecipientAddress` field — is checked for characters the NF-e cannot carry. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and the error names the field and the character. Accented Portuguese and anything else in ISO-8859-1 (latin1) is fine; tabs and line breaks are collapsed into a space, and typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API (`‘ ’ ‚` to `'`, `“ ” „` to `"`, `– — −` and `•` to `-`, `…` to `...`, `€` to `EUR`, `™` to `TM`). The SDK sends them unchanged. NFSE is not checked.
+- On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress` with `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` (`CityCode` optional): the ISSQN is retained by the tomador, and the city authorizer refuses the document without their address (`E0237`).
 
 ## Retrying safely
 
