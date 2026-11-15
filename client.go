@@ -177,7 +177,7 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	}
 
 	for i, item := range req.Items {
-		if err := item.Validate(); err != nil {
+		if err := validateProduct(item); err != nil {
 			return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].%s", i, err.Error())}
 		}
 	}

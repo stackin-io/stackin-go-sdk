@@ -118,7 +118,7 @@ func main() {
 
 `Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
 
-- `Barcode` (cEAN), when it holds a GTIN of 8, 12, 13 or 14 digits, must carry the right GS1 check digit (a mistyped digit is caught here instead of by the SEFAZ). `SEM GTIN` skips the check. `Product.Validate()` runs this check on its own.
+- `Barcode` (cEAN), when it holds a GTIN of 8, 12, 13 or 14 digits, must carry the right GS1 check digit (a mistyped digit is caught here instead of by the SEFAZ). `SEM GTIN` skips the check.
 
 ## Retrying safely
 
