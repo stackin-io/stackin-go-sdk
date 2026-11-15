@@ -1,3 +1,11 @@
+# Changelog
+
+## v0.10.1 — 2026-11-15
+
+### Chores
+- ignore .DS_Store
+- **platform:** install action-platform
+
 # Changelog — stackin (Go SDK)
 
 ## 0.1.1
