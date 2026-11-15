@@ -115,6 +115,11 @@ type IssueRequest struct {
 	Series           string
 	Number           string
 
+	// ExternalReference is the caller's own id for the document, an order
+	// number say. The API stores it as sent (at most 255 characters) and
+	// returns it on every read and webhook. Omitted when empty.
+	ExternalReference string
+
 	// IdempotencyKey makes a retry safe: the same key with the same body
 	// replays the first response instead of issuing a second document.
 	// Keys live 24 hours. Never generated for you — only the caller knows
@@ -136,11 +141,10 @@ func WithIdempotencyKey(key string) RequestOption {
 	return func(cfg *requestConfig) { cfg.idempotencyKey = key }
 }
 
-// validateNFEAddress rejects a missing or partial buyer address before the
-// network call — the SEFAZ rejects a partial enderDest (274/726/696/695).
-// missingAddressFields names the empty fields of address, in declaration
-// order. CityCode is only asked for when withCityCode is set.
-func missingAddressFields(address *Address, withCityCode bool) []string {
+// missingAddressFields names the empty required fields of address, in
+// declaration order. CityCode is never among them: the API resolves it from
+// City and State.
+func missingAddressFields(address *Address) []string {
 	fields := []struct {
 		name  string
 		value string
@@ -151,12 +155,6 @@ func missingAddressFields(address *Address, withCityCode bool) []string {
 		{"City", address.City},
 		{"State", address.State},
 		{"ZipCode", address.ZipCode},
-	}
-	if withCityCode {
-		fields = append(fields, struct {
-			name  string
-			value string
-		}{"CityCode", address.CityCode})
 	}
 
 	var missing []string
@@ -186,7 +184,7 @@ func validateRetainedISSAddress(req IssueRequest) error {
 		return &InvoiceError{Message: "recipient_address is required on an NFS-e " +
 			"when any item has tax_retained=true (ISSQN retained by the tomador)"}
 	}
-	if missing := missingAddressFields(req.RecipientAddress, false); len(missing) > 0 {
+	if missing := missingAddressFields(req.RecipientAddress); len(missing) > 0 {
 		return &InvoiceError{Message: fmt.Sprintf(
 			"RecipientAddress is missing required fields for NFSE with tax_retained=true: %s",
 			strings.Join(missing, ", "),
@@ -195,12 +193,16 @@ func validateRetainedISSAddress(req IssueRequest) error {
 	return nil
 }
 
+// validateNFEAddress rejects a missing or partial buyer address before the
+// network call — the SEFAZ rejects a partial enderDest (274/726/696/695).
+// Every field is required except CityCode, which the API resolves from City
+// and State, answering CITY_NOT_FOUND (422) when it cannot.
 func validateNFEAddress(address *Address) error {
 	if address == nil {
 		return &InvoiceError{Message: "RecipientAddress is required for NFE"}
 	}
 
-	if missing := missingAddressFields(address, true); len(missing) > 0 {
+	if missing := missingAddressFields(address); len(missing) > 0 {
 		return &InvoiceError{Message: fmt.Sprintf(
 			"RecipientAddress is missing required fields for NFE: %s",
 			strings.Join(missing, ", "),
@@ -341,6 +343,9 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	}
 	if req.Number != "" {
 		payload["number"] = req.Number
+	}
+	if req.ExternalReference != "" {
+		payload["external_reference"] = req.ExternalReference
 	}
 
 	return inv.request(http.MethodPost, "/invoices", payload, nil,

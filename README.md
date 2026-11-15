@@ -99,8 +99,8 @@ func main() {
 			City:         "Rio de Janeiro",
 			State:        "RJ",
 			ZipCode:      "22010000",
-			CityCode:     "3304557",
 		},
+		ExternalReference: "order-1234",
 	})
 	// The authorizer's PDF, as raw bytes. NFS-e only; the XML stays the
 	// legally valid document, and a 502 here means the authorizer is down.
@@ -112,7 +112,9 @@ func main() {
 }
 ```
 
-`RecipientAddress` is an `Address` — the buyer's address, **required for NFE**. On NFE every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. On NFSE it is the tomador's address: optional, except when any item has `TaxRetained` (the tomador withholds the ISSQN), where it is required with every field except `CityCode`. A missing or incomplete NFE address, or a missing or incomplete one on an NFSE with a retained item, returns an `*InvoiceError` locally, before the request goes out.
+`ExternalReference` is your own id for the document — an order number, a ticket. It is sent as `external_reference` (left out when empty), stored as sent (at most 255 characters), returned on every read and webhook, and `GET /invoices?external_reference=` finds the document by it.
+
+`RecipientAddress` is an `Address` — the buyer's address, **required for NFE**. On NFE `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` are required: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `CityCode` (the 7-digit IBGE municipality code) may be left out — the API resolves it from `City` and `State`, and answers `CITY_NOT_FOUND` (422) when it cannot; send it yourself when the name is ambiguous. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. On NFSE it is the tomador's address: optional, except when any item has `TaxRetained` (the tomador withholds the ISSQN), where it is required with every field except `CityCode`. A missing or incomplete NFE address, or a missing or incomplete one on an NFSE with a retained item, returns an `*InvoiceError` locally, before the request goes out.
 
 ### Checked before the request goes out
 
