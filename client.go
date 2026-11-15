@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -257,7 +258,16 @@ func (inv *Invoice) Invalidate(req InvalidationRequest) (map[string]any, error) 
 	return inv.request(http.MethodPost, "/invoices/invalidations", payload, nil)
 }
 
+var nfeAccessKeyPattern = regexp.MustCompile(`^\d{44}$`)
+
+// Correct files a correction letter (CC-e). NF-e only: the access key must
+// be the 44-digit NF-e key, checked before the call.
 func (inv *Invoice) Correct(accessKey string, documentType DocumentType, correction string) (map[string]any, error) {
+	if !nfeAccessKeyPattern.MatchString(accessKey) {
+		return nil, &InvoiceError{
+			Message: "Correct is NFe only. NFSe has no correction letter — cancel and reissue instead.",
+		}
+	}
 	length := len([]rune(correction))
 	if length < 15 || length > 1000 {
 		return nil, &InvoiceError{Message: "correction must be 15 to 1000 characters"}
