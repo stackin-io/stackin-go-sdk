@@ -183,7 +183,7 @@ result, err := inv.Correct(
 )
 ```
 
-The correction text is 15 to 1000 characters, checked locally before the call.
+The correction text is 15 to 1000 characters, and the access key must be the 44-digit NF-e key — both checked locally before the call. Any other key (an NFS-e's 50-digit one included) returns an `*InvoiceError`: NFS-e has no correction letter, so cancel and reissue instead.
 
 What a CC-e **cannot** fix: anything that changes the tax owed (base, rate,
 price, quantity, totals), the buyer or the seller, or the issue date. Those
@@ -194,8 +194,8 @@ The original document does not change — the CC-e is an event attached to it, a
 the authorized XML stays as it was. A document accepts at most 20 of them, and
 they are numbered for you.
 
-**NF-e only.** NFS-e has no correction letter, and asking for one returns
-a `409`.
+**NF-e only.** NFS-e has no correction letter. A key that is not 44 digits is
+refused locally; one that is, but belongs to an NFS-e, returns a `409`.
 
 ## Invalidating unused numbers
 

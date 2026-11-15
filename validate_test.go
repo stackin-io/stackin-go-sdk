@@ -268,3 +268,36 @@ func TestIssueRejectsAWrongGTINCheckDigit(t *testing.T) {
 
 	wantInvoiceError(t, err, *hits, "items[0].barcode has an invalid GTIN check digit")
 }
+
+// nfeAccessKey is a well-formed 44-digit NF-e access key.
+const nfeAccessKey = "35240912345678000199550010000000011000000017"
+
+func TestCorrectRejectsAKeyThatIsNotAnNFEKey(t *testing.T) {
+	keys := []string{
+		"",
+		"abc123",
+		"3524091234567800019955001000000001100000001",        // 43 digits
+		"352409123456780001995500100000000110000000170",      // 45 digits
+		"35240912345678000199550010000000011000000017123456", // 50: an NFS-e key
+		"3524091234567800019955001000000001100000001A",
+	}
+	for _, key := range keys {
+		inv, hits := countingInvoice(t)
+
+		_, err := inv.Correct(key, NFE, "Transportadora corrigida para Rapido Ltda")
+
+		wantInvoiceError(t, err, *hits,
+			"Correct is NFe only. NFSe has no correction letter — cancel and reissue instead.")
+	}
+}
+
+func TestCorrectSendsA44DigitKey(t *testing.T) {
+	inv, hits := countingInvoice(t)
+
+	if _, err := inv.Correct(nfeAccessKey, NFE, "Transportadora corrigida para Rapido Ltda"); err != nil {
+		t.Fatalf("Correct() = %v, want nil", err)
+	}
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1", *hits)
+	}
+}
