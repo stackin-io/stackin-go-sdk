@@ -43,7 +43,7 @@ func main() {
 		PurchaseOrder:              ptr("PC-2026-00042"),
 		PurchaseOrderItem:          ptr("1"),
 		ImportContentControlNumber: ptr("550E8400-E29B-41D4-A716-446655440000"),
-		RecopiNumber:               ptr("00000000000012345678"),
+		RecopiNumber:               ptr("20131106114609734393"),
 		ExtraGroups:                map[string]any{},
 	}
 

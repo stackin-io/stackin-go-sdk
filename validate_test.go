@@ -374,6 +374,44 @@ func TestValidateProductSkipsTheCheckDigitOnSemGTIN(t *testing.T) {
 	}
 }
 
+func TestIssueRejectsAWrongRecopiCheckDigit(t *testing.T) {
+	inv, hits := countingInvoice(t)
+	item := nfeItem()
+	item.RecopiNumber = ptr("20131106114609734394")
+
+	_, err := inv.Issue(nfeRequest(item))
+
+	wantInvoiceError(t, err, *hits, "items[0].recopi_number has invalid check digits")
+}
+
+func TestValidateProductAcceptsValidRecopiNumbers(t *testing.T) {
+	// 20131106114609734393 is the MOC §8.5.3 worked example (DV1 9, DV2 3);
+	// 00000000000012345600 has remainders 1 and 0, both giving DV 0.
+	for _, recopi := range []string{"20131106114609734393", "00000000000012345600"} {
+		if err := validateProduct(br.Product{Description: "Item", RecopiNumber: ptr(recopi)}); err != nil {
+			t.Errorf("validateProduct(recopi_number=%q) = %v, want nil", recopi, err)
+		}
+	}
+}
+
+func TestValidateProductRejectsWrongRecopiCheckDigits(t *testing.T) {
+	for _, recopi := range []string{"20131106114609734394", "20131106114609734383", "00000000000012345678"} {
+		err := validateProduct(br.Product{Description: "Item", RecopiNumber: ptr(recopi)})
+		if err == nil || err.Error() != "recopi_number has invalid check digits" {
+			t.Errorf("validateProduct(recopi_number=%q) = %v, want the check digits error", recopi, err)
+		}
+	}
+}
+
+func TestValidateProductRejectsARecopiNumberThatIsNot20Digits(t *testing.T) {
+	for _, recopi := range []string{"2013110611460973439", "201311061146097343930", "2013110611460973439A", ""} {
+		err := validateProduct(br.Product{Description: "Item", RecopiNumber: ptr(recopi)})
+		if err == nil || err.Error() != "recopi_number must have exactly 20 digits" {
+			t.Errorf("validateProduct(recopi_number=%q) = %v, want the length error", recopi, err)
+		}
+	}
+}
+
 // nfeAccessKey is a well-formed 44-digit NF-e access key.
 const nfeAccessKey = "35240912345678000199550010000000011000000017"
 
