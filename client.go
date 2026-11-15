@@ -176,6 +176,12 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 		return nil, &InvoiceError{Message: "items can't be empty"}
 	}
 
+	for i, item := range req.Items {
+		if err := item.Validate(); err != nil {
+			return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].%s", i, err.Error())}
+		}
+	}
+
 	if req.DocumentType == NFE {
 		for i, item := range req.Items {
 			if item.NCM == nil || *item.NCM == "" {
