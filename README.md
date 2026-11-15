@@ -112,7 +112,13 @@ func main() {
 }
 ```
 
-`RecipientAddress` is an `Address` — the buyer's address, **required for NFE** and ignored for NFSE. Every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address returns an `*InvoiceError` locally, before the request goes out.
+`RecipientAddress` is an `Address` — the buyer's address, **required for NFE**, and on NFSE required only when an item has `TaxRetained` (the tomador withholds the ISSQN). Every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address returns an `*InvoiceError` locally, before the request goes out.
+
+### Checked before the request goes out
+
+`Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
+
+- On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress`: the ISSQN is retained by the tomador, who has to be located.
 
 ## Retrying safely
 
@@ -281,7 +287,7 @@ Three things worth knowing before you loop:
 
 - `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, or a missing/incomplete `RecipientAddress` on NFE.
+- `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, a missing/incomplete `RecipientAddress` on NFE, or any other check listed under [Checked before the request goes out](#checked-before-the-request-goes-out).
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 

@@ -189,6 +189,14 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 			return nil, err
 		}
 	}
+	if req.DocumentType == NFSE && req.RecipientAddress == nil {
+		for _, item := range req.Items {
+			if item.TaxRetained {
+				return nil, &InvoiceError{Message: "recipient_address is required on an NFS-e " +
+					"when any item has tax_retained=true (ISSQN retained by the tomador)"}
+			}
+		}
+	}
 
 	items := make([]map[string]any, len(req.Items))
 	for i, item := range req.Items {
