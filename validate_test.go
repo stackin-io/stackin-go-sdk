@@ -301,3 +301,39 @@ func TestCorrectSendsA44DigitKey(t *testing.T) {
 		t.Errorf("hits = %d, want 1", *hits)
 	}
 }
+
+func TestIssueRequiresRecipientAddressForRetainedISSOnNFSE(t *testing.T) {
+	inv, hits := countingInvoice(t)
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType: NFSE,
+		ClientName:   "Acme",
+		TaxID:        "11222333000181",
+		Items: []br.Product{
+			{Description: "Consultoria", Amount: 10},
+			{Description: "Design", Amount: 10, TaxRetained: true},
+		},
+	})
+
+	wantInvoiceError(t, err, *hits,
+		"recipient_address is required on an NFS-e when any item has tax_retained=true (ISSQN retained by the tomador)")
+}
+
+func TestIssueSendsRetainedISSOnNFSEWithAnAddress(t *testing.T) {
+	inv, hits := countingInvoice(t)
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:     NFSE,
+		ClientName:       "Acme",
+		TaxID:            "11222333000181",
+		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: true}},
+		RecipientAddress: validNFEAddress(),
+	})
+
+	if err != nil {
+		t.Fatalf("Issue() = %v, want nil", err)
+	}
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1", *hits)
+	}
+}

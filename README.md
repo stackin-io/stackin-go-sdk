@@ -112,7 +112,7 @@ func main() {
 }
 ```
 
-`RecipientAddress` is an `Address` — the buyer's address, **required for NFE** and ignored for NFSE. Every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address returns an `*InvoiceError` locally, before the request goes out.
+`RecipientAddress` is an `Address` — the buyer's address, **required for NFE**, and on NFSE required only when an item has `TaxRetained` (the tomador withholds the ISSQN). Every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address returns an `*InvoiceError` locally, before the request goes out.
 
 ### Checked before the request goes out
 
@@ -123,6 +123,7 @@ func main() {
 - On NFE, an item's `Description` (xProd) is at most 120 characters. NFSE descriptions are not bound by it.
 - `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
 - On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, and every `RecipientAddress` field — must stay within printable ISO-8859-1 (latin1, U+0020 to U+00FF). Accented Portuguese is fine; emoji, curly quotes, dashes like `–` and tabs are not. The error names the field and the character. NFSE is not checked.
+- On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress`: the ISSQN is retained by the tomador, who has to be located.
 
 ## Retrying safely
 
