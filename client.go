@@ -171,6 +171,10 @@ func validateNFEAddress(address *Address) error {
 	return nil
 }
 
+// nfeDescriptionLimit is xProd's maximum length in the NF-e 4.00 schema.
+// NFS-e descriptions are not bound by it.
+const nfeDescriptionLimit = 120
+
 func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	if len(req.Items) == 0 {
 		return nil, &InvoiceError{Message: "items can't be empty"}
@@ -181,6 +185,11 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 			return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].%s", i, err.Error())}
 		}
 	}
+	if req.RecipientAddress != nil {
+		if err := req.RecipientAddress.validate(); err != nil {
+			return nil, &InvoiceError{Message: "recipient_address." + err.Error()}
+		}
+	}
 
 	if req.DocumentType == NFE {
 		for i, item := range req.Items {
@@ -189,6 +198,11 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 			}
 			if item.CFOP == nil || *item.CFOP == "" {
 				return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].cfop is required for NFE", i)}
+			}
+			if len([]rune(item.Description)) > nfeDescriptionLimit {
+				return nil, &InvoiceError{Message: fmt.Sprintf(
+					"items[%d].description exceeds %d characters (NF-e xProd limit)", i, nfeDescriptionLimit,
+				)}
 			}
 		}
 		if err := validateNFEAddress(req.RecipientAddress); err != nil {
