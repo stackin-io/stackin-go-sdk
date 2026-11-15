@@ -118,7 +118,7 @@ func main() {
 
 `Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
 
-- `NCM`, when set, must be the full 8 digits, or `00` for a service line. Any other 2-digit chapter is not accepted: the SEFAZ rejects it with `777`. `Product.Validate()` runs this check on its own.
+- `NCM`, when set, must be the full 8 digits, or `00` for a service line. Any other 2-digit chapter is not accepted: the SEFAZ rejects it with `777`.
 
 ## Retrying safely
 

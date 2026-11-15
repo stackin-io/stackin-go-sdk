@@ -80,3 +80,30 @@ func TestIssueSendsAnEightDigitNCMOrTheServiceCode(t *testing.T) {
 		}
 	}
 }
+
+func ptr[T any](v T) *T {
+	return &v
+}
+
+func TestValidateProductAcceptsAnEightDigitNCMOrTheServiceCode(t *testing.T) {
+	for _, ncm := range []string{"84713012", "00"} {
+		if err := validateProduct(br.Product{Description: "Notebook", NCM: ptr(ncm)}); err != nil {
+			t.Errorf("validateProduct(ncm=%q) = %v, want nil", ncm, err)
+		}
+	}
+}
+
+func TestValidateProductAcceptsAProductWithoutNCM(t *testing.T) {
+	if err := validateProduct(br.Product{Description: "Consultoria"}); err != nil {
+		t.Errorf("validateProduct() = %v, want nil", err)
+	}
+}
+
+func TestValidateProductRejectsAnyOtherNCM(t *testing.T) {
+	for _, ncm := range []string{"84", "12", "000", "8471", "8471301", "847130120", "8471301A", " 84713012"} {
+		err := validateProduct(br.Product{Description: "Notebook", NCM: ptr(ncm)})
+		if err == nil || err.Error() != "ncm must be the full 8 digits, or 00 for a service line" {
+			t.Errorf("validateProduct(ncm=%q) = %v, want the 8-digit error", ncm, err)
+		}
+	}
+}
