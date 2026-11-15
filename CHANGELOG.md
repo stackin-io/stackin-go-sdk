@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.11.0 — 2026-11-15
+
+### Features
+- **invoice:** require recipient address for retained ISS on NFS-e
+- **invoice:** require a 44-digit NF-e key in Correct
+- **product:** validate the GTIN check digit
+- **validation:** reject non-latin1 text on NF-e before sending
+- **validation:** mirror NF-e 4.00 XSD rules for barcode, xProd and address
+
+### Bug Fixes
+- **product:** move the GTIN check digit out of the public surface
+- **validation:** move the barcode check out of the public surface
+- **product:** move the NCM check out of the public surface
+- **validation:** refuse only what the API cannot convert to latin1
+- **invoice:** require a complete tomador address for retained ISS on NFS-e
+- **invoice:** accept alphanumeric-CNPJ NF-e keys in Correct and align docs
+- **product:** accept only 8-digit NCM or 00
+
 ## v0.10.1 — 2026-11-15
 
 ### Chores
