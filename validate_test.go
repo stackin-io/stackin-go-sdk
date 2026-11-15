@@ -179,3 +179,81 @@ func TestAddressValidateAcceptsTwoCharactersAndAbsentFields(t *testing.T) {
 		}
 	}
 }
+
+func TestIssueRejectsNonLatin1TextOnNFE(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*IssueRequest)
+		message string
+	}{
+		{
+			"emoji in description",
+			func(r *IssueRequest) { r.Items[0].Description = "Notebook 💻" },
+			"items[0].description contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '💻'",
+		},
+		{
+			"curly quote in client name",
+			func(r *IssueRequest) { r.ClientName = "Acme “Ltda”" },
+			"client_name contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '“'",
+		},
+		{
+			"en dash in street",
+			func(r *IssueRequest) { r.RecipientAddress.Street = "Rua A – Bloco B" },
+			"recipient_address.street contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '–'",
+		},
+		{
+			"tab in unit",
+			func(r *IssueRequest) { r.Items[0].Unit = "U\tN" },
+			"items[0].product.unit contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '\t'",
+		},
+		{
+			"euro sign in purchase order",
+			func(r *IssueRequest) { po := "PO-€1"; r.Items[0].PurchaseOrder = &po },
+			"items[0].product.purchase_order contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '€'",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			inv, hits := countingInvoice(t)
+			req := nfeRequest(nfeItem())
+			tc.mutate(&req)
+
+			_, err := inv.Issue(req)
+
+			wantInvoiceError(t, err, *hits, tc.message)
+		})
+	}
+}
+
+func TestIssueAcceptsLatin1AccentsOnNFE(t *testing.T) {
+	inv, hits := countingInvoice(t)
+	req := nfeRequest(nfeItem())
+	req.ClientName = "Pão de Açúcar Comércio Ltda"
+	req.Items[0].Description = "Café torrado ÿ ½ ©"
+	req.RecipientAddress.Neighborhood = "São João"
+
+	if _, err := inv.Issue(req); err != nil {
+		t.Fatalf("Issue() = %v, want nil", err)
+	}
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1", *hits)
+	}
+}
+
+func TestIssueDoesNotApplyLatin1ToNFSE(t *testing.T) {
+	inv, hits := countingInvoice(t)
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType: NFSE,
+		ClientName:   "Acme “Ltda”",
+		TaxID:        "11222333000181",
+		Items:        []br.Product{{Description: "Consultoria 💻", Amount: 10}},
+	})
+
+	if err != nil {
+		t.Fatalf("Issue() = %v, want nil", err)
+	}
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1", *hits)
+	}
+}

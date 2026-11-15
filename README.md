@@ -122,6 +122,7 @@ func main() {
 - `Barcode` (cEAN), when set, must be `SEM GTIN` or a GTIN of 8, 12, 13 or 14 digits.
 - On NFE, an item's `Description` (xProd) is at most 120 characters. NFSE descriptions are not bound by it.
 - `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
+- On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, and every `RecipientAddress` field — must stay within printable ISO-8859-1 (latin1, U+0020 to U+00FF). Accented Portuguese is fine; emoji, curly quotes, dashes like `–` and tabs are not. The error names the field and the character. NFSE is not checked.
 
 ## Retrying safely
 

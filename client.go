@@ -171,6 +171,56 @@ func validateNFEAddress(address *Address) error {
 	return nil
 }
 
+// validateLatin1 rejects the first free-text field of an NF-e payload
+// holding a character outside printable ISO-8859-1 (U+0020..U+00FF): the
+// NF-e accepts nothing else. Paths name the payload keys sent.
+func validateLatin1(req IssueRequest) error {
+	type field struct {
+		path  string
+		value string
+	}
+	fields := []field{{"client_name", req.ClientName}}
+	for i, item := range req.Items {
+		prefix := fmt.Sprintf("items[%d].", i)
+		fields = append(fields,
+			field{prefix + "description", item.Description},
+			field{prefix + "product.unit", item.Unit},
+			field{prefix + "product.purchase_order", deref(item.PurchaseOrder)},
+			field{prefix + "product.purchase_order_item", deref(item.PurchaseOrderItem)},
+			field{prefix + "observations", deref(item.Observations)},
+		)
+	}
+	if a := req.RecipientAddress; a != nil {
+		fields = append(fields,
+			field{"recipient_address.street", a.Street},
+			field{"recipient_address.number", a.Number},
+			field{"recipient_address.neighborhood", a.Neighborhood},
+			field{"recipient_address.city", a.City},
+			field{"recipient_address.state", a.State},
+			field{"recipient_address.zip_code", a.ZipCode},
+			field{"recipient_address.city_code", a.CityCode},
+		)
+	}
+	for _, f := range fields {
+		for _, r := range f.value {
+			if r < 0x20 || r > 0xFF {
+				return &InvoiceError{Message: fmt.Sprintf(
+					"%s contains a character outside ISO-8859-1 (latin1), which NF-e does not accept: '%c'",
+					f.path, r,
+				)}
+			}
+		}
+	}
+	return nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // nfeDescriptionLimit is xProd's maximum length in the NF-e 4.00 schema.
 // NFS-e descriptions are not bound by it.
 const nfeDescriptionLimit = 120
@@ -206,6 +256,9 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 			}
 		}
 		if err := validateNFEAddress(req.RecipientAddress); err != nil {
+			return nil, err
+		}
+		if err := validateLatin1(req); err != nil {
 			return nil, err
 		}
 	}
