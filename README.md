@@ -112,13 +112,13 @@ func main() {
 }
 ```
 
-`RecipientAddress` is an `Address` — the buyer's address, **required for NFE**, and on NFSE required only when an item has `TaxRetained` (the tomador withholds the ISSQN). Every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. A missing or incomplete address returns an `*InvoiceError` locally, before the request goes out.
+`RecipientAddress` is an `Address` — the buyer's address, **required for NFE**. On NFE every field is required, `CityCode` (the 7-digit IBGE municipality code) included: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. On NFSE it is the tomador's address: optional, except when any item has `TaxRetained` (the tomador withholds the ISSQN), where it is required with every field except `CityCode`. A missing or incomplete NFE address, or a missing or incomplete one on an NFSE with a retained item, returns an `*InvoiceError` locally, before the request goes out.
 
 ### Checked before the request goes out
 
 `Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
 
-- On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress`: the ISSQN is retained by the tomador, who has to be located.
+- On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress` with `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` (`CityCode` optional): the ISSQN is retained by the tomador, and the city authorizer refuses the document without their address (`E0237`).
 
 ## Retrying safely
 

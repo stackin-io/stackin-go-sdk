@@ -75,3 +75,58 @@ func TestIssueSendsRetainedISSOnNFSEWithAnAddress(t *testing.T) {
 		t.Errorf("hits = %d, want 1", *hits)
 	}
 }
+
+func TestIssueRequiresACompleteAddressForRetainedISSOnNFSE(t *testing.T) {
+	inv, hits := countingInvoice(t)
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:     NFSE,
+		ClientName:       "Acme",
+		TaxID:            "11222333000181",
+		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: true}},
+		RecipientAddress: &Address{Street: "Rua das Flores", City: "Joinville", State: "SC"},
+	})
+
+	wantInvoiceError(t, err, *hits,
+		"RecipientAddress is missing required fields for NFSE with tax_retained=true: Number, Neighborhood, ZipCode")
+}
+
+func TestIssueDoesNotAskForCityCodeOnRetainedISS(t *testing.T) {
+	inv, hits := countingInvoice(t)
+	address := validNFEAddress()
+	address.CityCode = ""
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:     NFSE,
+		ClientName:       "Acme",
+		TaxID:            "11222333000181",
+		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: true}},
+		RecipientAddress: address,
+	})
+
+	if err != nil {
+		t.Fatalf("Issue() = %v, want nil", err)
+	}
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1", *hits)
+	}
+}
+
+func TestIssueLeavesAPartialAddressAloneWithoutRetainedISS(t *testing.T) {
+	inv, hits := countingInvoice(t)
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:     NFSE,
+		ClientName:       "Acme",
+		TaxID:            "11222333000181",
+		Items:            []br.Product{{Description: "Design", Amount: 10}},
+		RecipientAddress: &Address{City: "Joinville"},
+	})
+
+	if err != nil {
+		t.Fatalf("Issue() = %v, want nil", err)
+	}
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1", *hits)
+	}
+}

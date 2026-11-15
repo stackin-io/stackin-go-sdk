@@ -137,11 +137,9 @@ func WithIdempotencyKey(key string) RequestOption {
 
 // validateNFEAddress rejects a missing or partial buyer address before the
 // network call — the SEFAZ rejects a partial enderDest (274/726/696/695).
-func validateNFEAddress(address *Address) error {
-	if address == nil {
-		return &InvoiceError{Message: "RecipientAddress is required for NFE"}
-	}
-
+// missingAddressFields names the empty fields of address, in declaration
+// order. CityCode is only asked for when withCityCode is set.
+func missingAddressFields(address *Address, withCityCode bool) []string {
 	fields := []struct {
 		name  string
 		value string
@@ -152,7 +150,12 @@ func validateNFEAddress(address *Address) error {
 		{"City", address.City},
 		{"State", address.State},
 		{"ZipCode", address.ZipCode},
-		{"CityCode", address.CityCode},
+	}
+	if withCityCode {
+		fields = append(fields, struct {
+			name  string
+			value string
+		}{"CityCode", address.CityCode})
 	}
 
 	var missing []string
@@ -161,7 +164,42 @@ func validateNFEAddress(address *Address) error {
 			missing = append(missing, field.name)
 		}
 	}
-	if len(missing) > 0 {
+	return missing
+}
+
+// validateRetainedISSAddress applies to an NFSE with any TaxRetained item:
+// the city authorizer refuses it without the tomador's address (E0237).
+// Every field is required except CityCode.
+func validateRetainedISSAddress(req IssueRequest) error {
+	retained := false
+	for _, item := range req.Items {
+		if item.TaxRetained {
+			retained = true
+			break
+		}
+	}
+	if !retained {
+		return nil
+	}
+	if req.RecipientAddress == nil {
+		return &InvoiceError{Message: "recipient_address is required on an NFS-e " +
+			"when any item has tax_retained=true (ISSQN retained by the tomador)"}
+	}
+	if missing := missingAddressFields(req.RecipientAddress, false); len(missing) > 0 {
+		return &InvoiceError{Message: fmt.Sprintf(
+			"RecipientAddress is missing required fields for NFSE with tax_retained=true: %s",
+			strings.Join(missing, ", "),
+		)}
+	}
+	return nil
+}
+
+func validateNFEAddress(address *Address) error {
+	if address == nil {
+		return &InvoiceError{Message: "RecipientAddress is required for NFE"}
+	}
+
+	if missing := missingAddressFields(address, true); len(missing) > 0 {
 		return &InvoiceError{Message: fmt.Sprintf(
 			"RecipientAddress is missing required fields for NFE: %s",
 			strings.Join(missing, ", "),
@@ -189,12 +227,9 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 			return nil, err
 		}
 	}
-	if req.DocumentType == NFSE && req.RecipientAddress == nil {
-		for _, item := range req.Items {
-			if item.TaxRetained {
-				return nil, &InvoiceError{Message: "recipient_address is required on an NFS-e " +
-					"when any item has tax_retained=true (ISSQN retained by the tomador)"}
-			}
+	if req.DocumentType == NFSE {
+		if err := validateRetainedISSAddress(req); err != nil {
+			return nil, err
 		}
 	}
 
