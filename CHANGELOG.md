@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Features
-- **invoice:** `ExternalReference` on `IssueRequest`, sent as `external_reference` — the caller's own id for the document, returned on every read and webhook
-- **invoice:** `CityCode` is no longer required on an NFE `RecipientAddress`; the API resolves it from city and state
-
 ## v0.11.0 — 2026-11-15
 
 ### Features
