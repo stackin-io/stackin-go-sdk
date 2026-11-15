@@ -140,8 +140,43 @@ func TestIssueRejectsPartialRecipientAddressForNFE(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for partial recipient address, got nil")
 	}
-	if !strings.Contains(err.Error(), "CityCode") {
+	if !strings.Contains(err.Error(), "Street") {
 		t.Errorf("error = %q, want it to name the missing fields", err.Error())
+	}
+	if strings.Contains(err.Error(), "CityCode") {
+		t.Errorf("error = %q, CityCode is resolved by the API and must not be required", err.Error())
+	}
+}
+
+func TestIssueAcceptsNFEAddressWithoutCityCode(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"access_key": "abc"}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL), WithAPIKey("test-key"))
+	ncm := "12345678"
+	cfop := "5102"
+	address := validNFEAddress()
+	address.CityCode = ""
+
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:     NFE,
+		ClientName:       "Acme",
+		TaxID:            "123",
+		Items:            []br.Product{{Description: "Widget", Amount: 10, NCM: &ncm, CFOP: &cfop}},
+		RecipientAddress: address,
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sent, _ := gotBody["recipient_address"].(map[string]any)
+	if _, present := sent["city_code"]; present {
+		t.Errorf("recipient_address = %v, want city_code omitted", sent)
 	}
 }
 
@@ -490,6 +525,57 @@ func TestIssueSendsIdempotencyKeyHeaderWhenSet(t *testing.T) {
 	}
 	if _, present := gotBody["idempotency_key"]; present {
 		t.Error("idempotency_key leaked into the request body")
+	}
+}
+
+func TestIssueSendsExternalReferenceWhenSet(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"access_key": "abc"}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Issue(IssueRequest{
+		DocumentType:      NFSE,
+		ClientName:        "Buyer",
+		TaxID:             "123",
+		Items:             []br.Product{{Description: "Servico", Amount: 100}},
+		ExternalReference: "nuvemshop:1:order:1234",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotBody["external_reference"] != "nuvemshop:1:order:1234" {
+		t.Errorf("external_reference = %v, want nuvemshop:1:order:1234", gotBody["external_reference"])
+	}
+}
+
+func TestIssueOmitsExternalReferenceByDefault(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"access_key": "abc"}})
+	}))
+	defer server.Close()
+
+	inv := NewInvoice(WithBaseURL(server.URL))
+	_, err := inv.Issue(IssueRequest{
+		DocumentType: NFSE,
+		ClientName:   "Buyer",
+		TaxID:        "123",
+		Items:        []br.Product{{Description: "Servico", Amount: 100}},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, present := gotBody["external_reference"]; present {
+		t.Error("external_reference sent although it was empty")
 	}
 }
 
