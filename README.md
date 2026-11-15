@@ -119,7 +119,7 @@ func main() {
 `Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
 
 - `NCM`, when set, must be the full 8 digits, or `00` for a service line. Any other 2-digit chapter is not accepted: the SEFAZ rejects it with `777`. `Product.Validate()` runs this check on its own.
-- `Barcode` (cEAN), when set, must be `SEM GTIN` or a GTIN of 8, 12, 13 or 14 digits.
+- `Barcode` (cEAN), when set, must be `SEM GTIN` or a GTIN of 8, 12, 13 or 14 digits, and a GTIN's GS1 check digit must be right (a mistyped digit is caught here instead of by the SEFAZ).
 - On NFE, an item's `Description` (xProd) is at most 120 characters. NFSE descriptions are not bound by it.
 - `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
 - On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, and every `RecipientAddress` field — must stay within printable ISO-8859-1 (latin1, U+0020 to U+00FF). Accented Portuguese is fine; emoji, curly quotes, dashes like `–` and tabs are not. The error names the field and the character. NFSE is not checked.

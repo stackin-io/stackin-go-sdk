@@ -257,3 +257,14 @@ func TestIssueDoesNotApplyLatin1ToNFSE(t *testing.T) {
 		t.Errorf("hits = %d, want 1", *hits)
 	}
 }
+
+func TestIssueRejectsAWrongGTINCheckDigit(t *testing.T) {
+	inv, hits := countingInvoice(t)
+	item := nfeItem()
+	barcode := "17891234567894"
+	item.Barcode = &barcode
+
+	_, err := inv.Issue(nfeRequest(item))
+
+	wantInvoiceError(t, err, *hits, "items[0].barcode has an invalid GTIN check digit")
+}
