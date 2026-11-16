@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.0 — 2026-11-15
+
+### Features
+- **invoice:** send the API v0.8-v0.9 issue fields
+- **product:** send the fuel group (comb) as br.Fuel
+
+### Docs
+- **readme:** document the API v0.8-v0.9 issue fields
+
 ## v0.13.0 — 2026-11-15
 
 ### Features
