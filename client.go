@@ -125,6 +125,35 @@ type IssueRequest struct {
 	// Keys live 24 hours. Never generated for you — only the caller knows
 	// which two requests are meant to be the same one.
 	IdempotencyKey string
+
+	// Discount is a discount on the whole document, in BRL, zero or more.
+	// The API spreads it over the lines. Omitted when nil.
+	Discount *float64
+
+	// IssuedAt is the emission moment (dhEmi), sent as RFC 3339 in the
+	// offset of its own Location. NF-e: at most 30 days back and 5 minutes
+	// ahead; NFS-e: never ahead. The API defaults it to now. Omitted when
+	// nil.
+	IssuedAt *time.Time
+
+	// Purpose is why the NF-e is issued; Direction whether it is outgoing
+	// or incoming. NF-e only, omitted when empty.
+	Purpose   Purpose
+	Direction Direction
+
+	// ReferencedKeys are the 44-character access keys of the NF-e, NFC-e
+	// or CF-e this NF-e refers to: required for PurposeComplementary and,
+	// but for a few CFOPs, PurposeReturn. NF-e only, omitted when empty.
+	ReferencedKeys []string
+
+	// ForeignID identifies a buyer abroad (idEstrangeiro, 5 to 20
+	// characters), for an NF-e whose RecipientAddress.State is EX. TaxID
+	// is then left out. Omitted when empty.
+	ForeignID string
+
+	// Export is where the goods leave Brazil, required for an outgoing
+	// NF-e to a buyer abroad. Omitted when nil.
+	Export *Export
 }
 
 // RequestOption tunes a single call, as opposed to Option, which tunes the
@@ -143,18 +172,23 @@ func WithIdempotencyKey(key string) RequestOption {
 
 // missingAddressFields names the empty required fields of address, in
 // declaration order. CityCode is never among them: the API resolves it from
-// City and State.
-func missingAddressFields(address *Address) []string {
-	fields := []struct {
+// City and State. When abroad, ZipCode gives way to CountryCode.
+func missingAddressFields(address *Address, abroad bool) []string {
+	type field struct {
 		name  string
 		value string
-	}{
+	}
+	fields := []field{
 		{"Street", address.Street},
 		{"Number", address.Number},
 		{"Neighborhood", address.Neighborhood},
 		{"City", address.City},
 		{"State", address.State},
-		{"ZipCode", address.ZipCode},
+	}
+	if abroad {
+		fields = append(fields, field{"CountryCode", address.CountryCode})
+	} else {
+		fields = append(fields, field{"ZipCode", address.ZipCode})
 	}
 
 	var missing []string
@@ -184,7 +218,7 @@ func validateRetainedISSAddress(req IssueRequest) error {
 		return &InvoiceError{Message: "recipient_address is required on an NFS-e " +
 			"when any item has tax_retained=true (ISSQN retained by the tomador)"}
 	}
-	if missing := missingAddressFields(req.RecipientAddress); len(missing) > 0 {
+	if missing := missingAddressFields(req.RecipientAddress, false); len(missing) > 0 {
 		return &InvoiceError{Message: fmt.Sprintf(
 			"RecipientAddress is missing required fields for NFSE with tax_retained=true: %s",
 			strings.Join(missing, ", "),
@@ -196,13 +230,14 @@ func validateRetainedISSAddress(req IssueRequest) error {
 // validateNFEAddress rejects a missing or partial buyer address before the
 // network call — the SEFAZ rejects a partial enderDest (274/726/696/695).
 // Every field is required except CityCode, which the API resolves from City
-// and State, answering CITY_NOT_FOUND (422) when it cannot.
+// and State, answering CITY_NOT_FOUND (422) when it cannot. A buyer abroad
+// (State EX) has no ZipCode and needs a CountryCode instead.
 func validateNFEAddress(address *Address) error {
 	if address == nil {
 		return &InvoiceError{Message: "RecipientAddress is required for NFE"}
 	}
 
-	if missing := missingAddressFields(address); len(missing) > 0 {
+	if missing := missingAddressFields(address, address.abroad()); len(missing) > 0 {
 		return &InvoiceError{Message: fmt.Sprintf(
 			"RecipientAddress is missing required fields for NFE: %s",
 			strings.Join(missing, ", "),
@@ -245,6 +280,13 @@ func validateLatin1(req IssueRequest) error {
 			field{prefix + "product.purchase_order_item", deref(item.PurchaseOrderItem)},
 			field{prefix + "observations", deref(item.Observations)},
 		)
+		if fuel := item.Fuel; fuel != nil {
+			fields = append(fields,
+				field{prefix + "product.br.fuel.anp_description", fuel.AnpDescription},
+				field{prefix + "product.br.fuel.consumer_state", fuel.ConsumerState},
+				field{prefix + "product.br.fuel.codif", deref(fuel.Codif)},
+			)
+		}
 	}
 	if a := req.RecipientAddress; a != nil {
 		fields = append(fields,
@@ -255,6 +297,16 @@ func validateLatin1(req IssueRequest) error {
 			field{"recipient_address.state", a.State},
 			field{"recipient_address.zip_code", a.ZipCode},
 			field{"recipient_address.city_code", a.CityCode},
+			field{"recipient_address.country_code", a.CountryCode},
+			field{"recipient_address.country_name", a.CountryName},
+		)
+	}
+	fields = append(fields, field{"foreign_id", req.ForeignID})
+	if e := req.Export; e != nil {
+		fields = append(fields,
+			field{"export.exit_state", e.ExitState},
+			field{"export.place", e.Place},
+			field{"export.dispatch_place", e.DispatchPlace},
 		)
 	}
 	for _, f := range fields {
@@ -277,6 +329,32 @@ func deref(s *string) string {
 	return *s
 }
 
+// validateIssueFields checks the optional request fields whose shape is
+// unambiguous: a negative Discount, a zero IssuedAt and a Purpose or
+// Direction outside its enumeration. Everything else about them is a
+// fiscal rule the API owns.
+func validateIssueFields(req IssueRequest) error {
+	if req.Discount != nil && *req.Discount < 0 {
+		return &InvoiceError{Message: "discount must be zero or more"}
+	}
+	if req.IssuedAt != nil && req.IssuedAt.IsZero() {
+		return &InvoiceError{Message: "issued_at must be a date-time, not the zero time"}
+	}
+	switch req.Purpose {
+	case "", PurposeNormal, PurposeComplementary, PurposeAdjustment, PurposeReturn:
+	default:
+		return &InvoiceError{Message: fmt.Sprintf(
+			"purpose must be normal, complementary, adjustment or return, not %q", req.Purpose,
+		)}
+	}
+	switch req.Direction {
+	case "", DirectionOut, DirectionIn:
+	default:
+		return &InvoiceError{Message: fmt.Sprintf("direction must be out or in, not %q", req.Direction)}
+	}
+	return nil
+}
+
 // nfeDescriptionLimit is xProd's maximum length in the NF-e 4.00 schema.
 // NFS-e descriptions are not bound by it.
 const nfeDescriptionLimit = 120
@@ -284,6 +362,10 @@ const nfeDescriptionLimit = 120
 func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	if len(req.Items) == 0 {
 		return nil, &InvoiceError{Message: "items can't be empty"}
+	}
+
+	if err := validateIssueFields(req); err != nil {
+		return nil, err
 	}
 
 	for i, item := range req.Items {
@@ -335,6 +417,9 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 		"tax_id":        req.TaxID,
 		"items":         items,
 	}
+	if req.TaxID == "" && req.DocumentType == NFE && req.RecipientAddress.abroad() {
+		delete(payload, "tax_id")
+	}
 	if req.RecipientAddress != nil {
 		payload["recipient_address"] = req.RecipientAddress
 	}
@@ -346,6 +431,27 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	}
 	if req.ExternalReference != "" {
 		payload["external_reference"] = req.ExternalReference
+	}
+	if req.Discount != nil {
+		payload["discount"] = strconv.FormatFloat(*req.Discount, 'f', -1, 64)
+	}
+	if req.IssuedAt != nil {
+		payload["issued_at"] = req.IssuedAt.Format(time.RFC3339)
+	}
+	if req.Purpose != "" {
+		payload["purpose"] = string(req.Purpose)
+	}
+	if req.Direction != "" {
+		payload["direction"] = string(req.Direction)
+	}
+	if len(req.ReferencedKeys) > 0 {
+		payload["referenced_keys"] = req.ReferencedKeys
+	}
+	if req.ForeignID != "" {
+		payload["foreign_id"] = req.ForeignID
+	}
+	if req.Export != nil {
+		payload["export"] = req.Export
 	}
 
 	return inv.request(http.MethodPost, "/invoices", payload, nil,
