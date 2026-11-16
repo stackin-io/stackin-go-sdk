@@ -18,8 +18,10 @@ var (
 // 00 for a service line; the SEFAZ rejects any other short code with 777.
 // Barcode (cEAN) is either "SEM GTIN" or a GTIN-8, -12, -13 or -14 whose
 // GS1 check digit holds. RecopiNumber (nRECOPI) is 20 digits whose two
-// modulo-11 check digits (MOC 7.0 §8.5) hold. Issue calls it for every item and returns the
-// failure as an *InvoiceError naming the item.
+// modulo-11 check digits (MOC 7.0 §8.5) hold. Fuel needs its three
+// required fields and is never sent beside ExtraGroups["comb"], the same
+// group. Issue calls it for every item and returns the failure as an
+// *InvoiceError naming the item.
 func validateProduct(p br.Product) error {
 	if p.NCM != nil && *p.NCM != "" && !ncmPattern.MatchString(*p.NCM) {
 		return errors.New("ncm must be the full 8 digits, or 00 for a service line")
@@ -38,6 +40,31 @@ func validateProduct(p br.Product) error {
 		}
 		if !validRecopiCheckDigits(*p.RecopiNumber) {
 			return errors.New("recopi_number has invalid check digits")
+		}
+	}
+	if p.Fuel != nil {
+		if err := validateFuel(*p.Fuel, p.ExtraGroups); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateFuel(fuel br.Fuel, extraGroups map[string]any) error {
+	if _, ok := extraGroups["comb"]; ok {
+		return errors.New("fuel can't be sent together with extra_groups.comb: send the fuel group once")
+	}
+	required := []struct {
+		name  string
+		value string
+	}{
+		{"anp_code", fuel.AnpCode},
+		{"anp_description", fuel.AnpDescription},
+		{"consumer_state", fuel.ConsumerState},
+	}
+	for _, field := range required {
+		if field.value == "" {
+			return errors.New("fuel." + field.name + " is required")
 		}
 	}
 	return nil

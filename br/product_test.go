@@ -375,3 +375,55 @@ func TestAnItemWithoutIbsCbsSendsNothing(t *testing.T) {
 func ptrTest[T any](value T) *T {
 	return &value
 }
+
+func TestProductToDictSendsFuelGroup(t *testing.T) {
+	p := Product{Description: "Diesel", Amount: 10, Fuel: &Fuel{
+		AnpCode:                   "210203001",
+		AnpDescription:            "GLP",
+		ConsumerState:             "PR",
+		GlpPercent:                ptr(60.0),
+		NaturalGasNationalPercent: ptr(30.0),
+		NaturalGasImportedPercent: ptr(10.0),
+		StartingValue:             ptr(5.5),
+		Codif:                     ptr("123456789"),
+		TemperatureQuantity:       ptr(1000.0),
+		BiodieselPercent:          ptr(0.0),
+	}}
+
+	got := p.ToDict()["product"].(map[string]any)["br"].(map[string]any)["fuel"]
+	want := map[string]any{
+		"anp_code":                     "210203001",
+		"anp_description":              "GLP",
+		"consumer_state":               "PR",
+		"glp_percent":                  60.0,
+		"natural_gas_national_percent": 30.0,
+		"natural_gas_imported_percent": 10.0,
+		"starting_value":               5.5,
+		"codif":                        "123456789",
+		"temperature_quantity":         1000.0,
+		"biodiesel_percent":            0.0,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("fuel = %#v, want %#v", got, want)
+	}
+}
+
+func TestProductToDictSendsOnlyRequiredFuelFields(t *testing.T) {
+	p := Product{Description: "Diesel", Amount: 10, Fuel: &Fuel{
+		AnpCode: "820101034", AnpDescription: "OLEO DIESEL", ConsumerState: "SP",
+	}}
+
+	got := p.ToDict()["product"].(map[string]any)["br"].(map[string]any)["fuel"]
+	want := map[string]any{"anp_code": "820101034", "anp_description": "OLEO DIESEL", "consumer_state": "SP"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("fuel = %#v, want %#v", got, want)
+	}
+}
+
+func TestProductToDictOmitsFuelWhenUnset(t *testing.T) {
+	ncm := "27101921"
+	data := Product{Description: "Diesel", Amount: 10, NCM: &ncm}.ToDict()
+	if _, present := data["product"].(map[string]any)["br"].(map[string]any)["fuel"]; present {
+		t.Error("fuel sent, want it left out when nil")
+	}
+}
