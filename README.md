@@ -116,6 +116,72 @@ func main() {
 
 `RecipientAddress` is an `Address` — the buyer's address, **required for NFE**. On NFE `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` are required: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `CityCode` (the 7-digit IBGE municipality code) may be left out — the API resolves it from `City` and `State`, and answers `CITY_NOT_FOUND` (422) when it cannot; send it yourself when the name is ambiguous. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. On NFSE it is the tomador's address: optional, except when any item has `TaxRetained` (the tomador withholds the ISSQN), where it is required with every field except `CityCode`. A missing or incomplete NFE address, or a missing or incomplete one on an NFSE with a retained item, returns an `*InvoiceError` locally, before the request goes out.
 
+### Discount, emission date, purpose and buyers abroad
+
+Optional since API v0.8–v0.9. Each is left out of the body when unset, so a call that does not use them sends exactly what it sent before.
+
+```go
+issuedAt := time.Date(2026, 11, 14, 9, 30, 0, 0, time.FixedZone("BRT", -3*60*60))
+discount := 25.00
+
+invoice, err := client.Issue(stackin.IssueRequest{
+	DocumentType:     stackin.NFE,
+	ClientName:       "Buyer Company Ltd",
+	TaxID:            "11111111111111",
+	Items:            items,
+	RecipientAddress: address,
+	Discount:         &discount,
+	IssuedAt:         &issuedAt,
+	Purpose:          stackin.PurposeReturn,
+	Direction:        stackin.DirectionIn,
+	ReferencedKeys:   []string{"35261111111111111111550010000000011000000010"},
+})
+```
+
+| Field | Sent as | What it is |
+|---|---|---|
+| `Discount *float64` | `discount` (decimal string) | A discount on the whole document, in BRL, zero or more. The API spreads it over the lines. |
+| `IssuedAt *time.Time` | `issued_at` | The emission moment, RFC 3339 in the offset of the `time.Time`'s own `Location` (`2026-11-14T09:30:00-03:00`; UTC goes out as `Z`). NF-e: at most 30 days back and 5 minutes ahead; NFS-e: never ahead. Defaults to now. |
+| `Purpose` | `purpose` | NF-e only: `PurposeNormal` (the default), `PurposeComplementary`, `PurposeAdjustment` or `PurposeReturn`. |
+| `Direction` | `direction` | NF-e only: `DirectionOut` (the default) or `DirectionIn`, an incoming NF-e the company issues itself, such as a sale returned by the buyer. |
+| `ReferencedKeys []string` | `referenced_keys` | NF-e only: the 44-character access keys of the NF-e, NFC-e or CF-e this one refers to. Required for `PurposeComplementary` and, but for a few CFOPs, `PurposeReturn`. |
+| `ForeignID string` | `foreign_id` | The document of a buyer abroad (idEstrangeiro, 5 to 20 characters). |
+| `Export *Export` | `export` | Where the goods leave Brazil: `ExitState` (a Brazilian state, never `EX`), `Place` and an optional `DispatchPlace`. Required for an outgoing NF-e to a buyer abroad. |
+
+A buyer abroad is a `RecipientAddress` with `State: stackin.AbroadState` (`"EX"`), NF-e only. `ZipCode` and `CityCode` may be left out; `CountryCode` (the BACEN code, 1 to 4 digits, never 1058) is required and `CountryName` names it. `TaxID` is left empty and the SDK does not send it:
+
+```go
+invoice, err = client.Issue(stackin.IssueRequest{
+	DocumentType: stackin.NFE,
+	ClientName:   "Globex Corporation",
+	ForeignID:    "P1234567",
+	Items:        items,
+	RecipientAddress: &stackin.Address{
+		Street: "Fifth Avenue", Number: "350", Neighborhood: "Midtown",
+		City: "New York", State: stackin.AbroadState,
+		CountryCode: "2496", CountryName: "Estados Unidos",
+	},
+	Export: &stackin.Export{ExitState: "SP", Place: "Porto de Santos"},
+})
+```
+
+The SDK does not check the BACEN code's check digit: the official table has countries whose digit does not close.
+
+An item on a fuel CFOP carries the fuel group (`comb`) as `br.Fuel`, sent under the item's `fuel` key. `AnpCode` (cProdANP, 9 digits), `AnpDescription` and `ConsumerState` are required; `GlpPercent`, `NaturalGasNationalPercent`, `NaturalGasImportedPercent`, `StartingValue`, `Codif`, `TemperatureQuantity` and `BiodieselPercent` are sent only when set. The groups it does not cover (CIDE, encerrante, origComb) still go through `ExtraGroups["comb"]` — one or the other, never both.
+
+```go
+biodiesel := 14.0
+item := br.Product{
+	Description: "Oleo diesel B S10", Amount: 6200.00, NCM: &ncm, CFOP: &cfop,
+	Fuel: &br.Fuel{
+		AnpCode: "820101034", AnpDescription: "OLEO DIESEL B S10",
+		ConsumerState: "SP", BiodieselPercent: &biodiesel,
+	},
+}
+```
+
+The fiscal rules about these fields — the emission window, which purpose needs a referenced key, an export group on a note to Brazil — are the API's, and it answers them by name.
+
 ### Checked before the request goes out
 
 `Issue()` refuses, with an `*InvoiceError` and no network call, anything the authorizer is certain to reject:
@@ -124,8 +190,11 @@ func main() {
 - `Barcode` (cEAN), when set, must be `SEM GTIN` or a GTIN of 8, 12, 13 or 14 digits, and a GTIN's GS1 check digit must be right (a mistyped digit is caught here instead of by the SEFAZ).
 - `RecopiNumber` (nRECOPI), when set, must be the 20-digit RECOPI number; the SDK checks its two modulo-11 check digits (MOC §8.5) before sending.
 - On NFE, an item's `Description` (xProd) is at most 120 characters. NFSE descriptions are not bound by it.
+- `Discount`, when set, is zero or more; `IssuedAt`, when set, is not the zero `time.Time`; `Purpose` and `Direction`, when set, are one of their constants.
+- An item's `Fuel` needs `AnpCode`, `AnpDescription` and `ConsumerState`, and is refused beside `ExtraGroups["comb"]`.
+- On NFE, a `RecipientAddress` with `State` `EX` (a buyer abroad) needs `CountryCode` instead of `ZipCode`.
 - `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
-- On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, and every `RecipientAddress` field — is checked for characters the NF-e cannot carry. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and the error names the field and the character. Accented Portuguese and anything else in ISO-8859-1 (latin1) is fine; tabs and line breaks are collapsed into a space, and typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API (`‘ ’ ‚` to `'`, `“ ” „` to `"`, `– — −` and `•` to `-`, `…` to `...`, `€` to `EUR`, `™` to `TM`). The SDK sends them unchanged. NFSE is not checked.
+- On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, the `Fuel` group's text fields, every `RecipientAddress` field, `ForeignID` and every `Export` field — is checked for characters the NF-e cannot carry. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and the error names the field and the character. Accented Portuguese and anything else in ISO-8859-1 (latin1) is fine; tabs and line breaks are collapsed into a space, and typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API (`‘ ’ ‚` to `'`, `“ ” „` to `"`, `– — −` and `•` to `-`, `…` to `...`, `€` to `EUR`, `™` to `TM`). The SDK sends them unchanged. NFSE is not checked.
 - On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress` with `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` (`CityCode` optional): the ISSQN is retained by the tomador, and the city authorizer refuses the document without their address (`E0237`).
 
 ## Retrying safely

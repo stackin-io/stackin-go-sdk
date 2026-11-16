@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+// AbroadState is the State of a buyer abroad on an NF-e. Such an address
+// may leave ZipCode and CityCode out and names its country with
+// CountryCode (BACEN code) and CountryName instead.
+const AbroadState = "EX"
+
 type Address struct {
 	State        string `json:"state,omitempty"`
 	CityCode     string `json:"city_code,omitempty"`
@@ -13,6 +18,22 @@ type Address struct {
 	Neighborhood string `json:"neighborhood,omitempty"`
 	City         string `json:"city,omitempty"`
 	ZipCode      string `json:"zip_code,omitempty"`
+	CountryCode  string `json:"country_code,omitempty"`
+	CountryName  string `json:"country_name,omitempty"`
+}
+
+func (a *Address) abroad() bool {
+	return a != nil && strings.EqualFold(strings.TrimSpace(a.State), AbroadState)
+}
+
+// Export is where the goods of an NF-e to a buyer abroad leave Brazil (the
+// exporta group): ExitState is a Brazilian state (UFSaidaPais, never EX),
+// Place the place of shipment or border crossing (xLocExporta) and
+// DispatchPlace the optional customs facility of dispatch (xLocDespacho).
+type Export struct {
+	ExitState     string `json:"exit_state"`
+	Place         string `json:"place"`
+	DispatchPlace string `json:"dispatch_place,omitempty"`
 }
 
 // validate checks the fields the NF-e 4.00 schema bounds, whatever the

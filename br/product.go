@@ -29,6 +29,40 @@ func (g IbsCbs) toMap() map[string]any {
 	return data
 }
 
+// Fuel is the NF-e fuel group (comb), needed for a good on a fuel CFOP.
+// AnpCode (cProdANP, 9 digits), AnpDescription (descANP) and ConsumerState
+// (UFCons) are required; the others are sent only when set. It goes on the
+// wire under the item's "fuel" key and never together with
+// ExtraGroups["comb"].
+type Fuel struct {
+	AnpCode                   string
+	AnpDescription            string
+	ConsumerState             string
+	GlpPercent                *float64
+	NaturalGasNationalPercent *float64
+	NaturalGasImportedPercent *float64
+	StartingValue             *float64
+	Codif                     *string
+	TemperatureQuantity       *float64
+	BiodieselPercent          *float64
+}
+
+func (f Fuel) toMap() map[string]any {
+	data := map[string]any{
+		"anp_code":        f.AnpCode,
+		"anp_description": f.AnpDescription,
+		"consumer_state":  f.ConsumerState,
+	}
+	setIfNotNil(data, "glp_percent", f.GlpPercent)
+	setIfNotNil(data, "natural_gas_national_percent", f.NaturalGasNationalPercent)
+	setIfNotNil(data, "natural_gas_imported_percent", f.NaturalGasImportedPercent)
+	setIfNotNil(data, "starting_value", f.StartingValue)
+	setIfNotNil(data, "codif", f.Codif)
+	setIfNotNil(data, "temperature_quantity", f.TemperatureQuantity)
+	setIfNotNil(data, "biodiesel_percent", f.BiodieselPercent)
+	return data
+}
+
 type Product struct {
 	Description       string
 	Amount            float64
@@ -58,6 +92,7 @@ type Product struct {
 	ExtraGroups                map[string]any
 	Tax                        *Tax
 	IbsCbs                     *IbsCbs
+	Fuel                       *Fuel
 
 	ServiceCode     *string  // LC 116/2003 item.subitem, nfse only
 	ServiceDiscount *float64 // unconditional discount, nfse only
@@ -109,6 +144,9 @@ func (p Product) ToDict() map[string]any {
 	}
 	if p.IbsCbs != nil {
 		br["ibs_cbs"] = p.IbsCbs.toMap()
+	}
+	if p.Fuel != nil {
+		br["fuel"] = p.Fuel.toMap()
 	}
 	for k, v := range p.ExtraGroups {
 		br[k] = v

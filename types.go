@@ -24,3 +24,23 @@ const (
 	Desconhecimento      Manifestation = "210220"
 	OperacaoNaoRealizada Manifestation = "210240"
 )
+
+// Purpose is why an NF-e is issued (finNFe). The API defaults to
+// PurposeNormal when it is left out.
+type Purpose string
+
+const (
+	PurposeNormal        Purpose = "normal"
+	PurposeComplementary Purpose = "complementary"
+	PurposeAdjustment    Purpose = "adjustment"
+	PurposeReturn        Purpose = "return"
+)
+
+// Direction is whether an NF-e is outgoing or an incoming one the company
+// issues itself (tpNF). The API defaults to DirectionOut when it is left out.
+type Direction string
+
+const (
+	DirectionOut Direction = "out"
+	DirectionIn  Direction = "in"
+)
