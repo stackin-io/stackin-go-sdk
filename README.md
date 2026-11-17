@@ -330,6 +330,38 @@ Realizada. Only the last one takes a reason, and it requires one — both rules 
 checked locally, before the request goes out, because a round trip to be told a
 fixed rule is a round trip wasted.
 
+## Several companies on one credential
+
+An API key is one company and needs nothing here: with no company set, requests are exactly what they were before. A credential authorized for several companies (an OAuth connection) has to say which one each call acts on, by the company id or its CNPJ (punctuation is ignored). It goes out as the `X-Stackin-Company` header on every request, lookups included.
+
+```go
+client := stackin.NewInvoice(
+	stackin.WithAPIKey(token),
+	stackin.WithCompany("00.000.000/0001-91"),
+)
+
+// One call on another company; client itself is unchanged.
+client.ForCompany("6f1c2b8e-...").Consult("ACCESS_KEY...", stackin.NFE)
+
+// Which companies this credential reaches, and what it may do on each.
+access, err := client.Companies() // GET /api/v1/me/companies
+for _, company := range access.Companies {
+	fmt.Println(company.CompanyID, company.Name, company.TaxID, company.Permissions)
+}
+```
+
+`Companies()` returns an `*AuthorizedCompanies` (`Environment`, `Companies []AuthorizedCompany`). An API key lists as its one company with every permission.
+
+Three answers come back typed, and none of them is worth repeating unchanged:
+
+| Error | When |
+|---|---|
+| `*stackin.CompanyRequiredError` | 422 `company_required`: the credential covers several companies and the call named none. `Companies` lists them. |
+| `*stackin.CompanyNotInScopeError` | 403 `company_not_in_scope`: the company named is not covered. `Companies` lists the ones that are. |
+| `*stackin.InsufficientPermissionError` | 403 `INSUFFICIENT_PERMISSION`: the company is covered but the permission is missing. `Description` reads `needs X, has Y, company=<id>`. |
+
+Each wraps the `*APIError` it used to be, so `errors.As(err, &apiErr)` keeps working; a plain type assertion to `*APIError` does not match them.
+
 ## Looking up a code, or who a CNPJ belongs to
 
 Two more clients, for the tables an issuer reads while filling a document. Neither writes anything.
@@ -362,6 +394,7 @@ Three things worth knowing before you loop:
 ## Errors
 
 - `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated.
+- `*stackin.CompanyRequiredError`, `*stackin.CompanyNotInScopeError`, `*stackin.InsufficientPermissionError` — the company or permission answers described under [Several companies on one credential](#several-companies-on-one-credential). Each wraps an `*APIError`.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
 - `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, a missing/incomplete `RecipientAddress` on NFE, or any other check listed under [Checked before the request goes out](#checked-before-the-request-goes-out).
 
