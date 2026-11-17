@@ -64,11 +64,27 @@ func (e *InsufficientPermissionError) Unwrap() error {
 	return &e.APIError
 }
 
+// ClientAlreadyExistsError is the API's 409 CLIENT_EXISTS: the company
+// already has a client with this tax id or foreign id. ClientID names it,
+// to read or reactivate instead of searching for it. errors.As still
+// finds the *APIError inside.
+type ClientAlreadyExistsError struct {
+	APIError
+	Message  string
+	ClientID string
+}
+
+func (e *ClientAlreadyExistsError) Unwrap() error {
+	return &e.APIError
+}
+
 type companyErrorDetail struct {
 	Error       string              `json:"error"`
 	Code        string              `json:"code"`
 	Description string              `json:"error_description"`
 	Companies   []AuthorizedCompany `json:"companies"`
+	Message     string              `json:"message"`
+	ClientID    string              `json:"client_id"`
 }
 
 func newAPIError(status int, detail string, raw json.RawMessage) error {
@@ -86,6 +102,8 @@ func newAPIError(status int, detail string, raw json.RawMessage) error {
 		return &CompanyNotInScopeError{APIError: base, Description: parsed.Description, Companies: parsed.Companies}
 	case status == http.StatusForbidden && parsed.Code == "INSUFFICIENT_PERMISSION":
 		return &InsufficientPermissionError{APIError: base, Description: parsed.Description}
+	case status == http.StatusConflict && parsed.Code == "CLIENT_EXISTS":
+		return &ClientAlreadyExistsError{APIError: base, Message: parsed.Message, ClientID: parsed.ClientID}
 	}
 	return &base
 }
