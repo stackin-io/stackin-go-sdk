@@ -348,6 +348,52 @@ func TestIbsCbsNestsUnderBr(t *testing.T) {
 	if _, present := group["base"]; present {
 		t.Errorf("base should be absent when not given, got %v", group["base"])
 	}
+	for _, key := range []string{"reduction_ibs", "reduction_cbs"} {
+		if _, present := group[key]; present {
+			t.Errorf("%s should be absent when not given, got %v", key, group[key])
+		}
+	}
+}
+
+func TestIbsCbsCarriesTheRateReductions(t *testing.T) {
+	product := Product{
+		Description: "Medicamento",
+		IbsCbs: &IbsCbs{
+			CST:            "200",
+			Classification: "200009",
+			RateState:      0.1,
+			RateFederal:    0.9,
+			ReductionIbs:   ptrTest(60.0),
+			ReductionCbs:   ptrTest(60.0),
+		},
+	}
+
+	br := product.ToDict()["product"].(map[string]any)["br"].(map[string]any)
+	group := br["ibs_cbs"].(map[string]any)
+
+	if group["reduction_ibs"] != 60.0 || group["reduction_cbs"] != 60.0 {
+		t.Errorf("got %v", group)
+	}
+}
+
+func TestIbsCbsSendsAZeroReductionWhenSet(t *testing.T) {
+	product := Product{
+		Description: "Teclado",
+		IbsCbs: &IbsCbs{
+			CST: "011", Classification: "011001",
+			ReductionIbs: ptrTest(0.0), ReductionCbs: ptrTest(100.0),
+		},
+	}
+
+	br := product.ToDict()["product"].(map[string]any)["br"].(map[string]any)
+	group := br["ibs_cbs"].(map[string]any)
+
+	if value, present := group["reduction_ibs"]; !present || value != 0.0 {
+		t.Errorf("reduction_ibs: got %v (present %v)", value, present)
+	}
+	if group["reduction_cbs"] != 100.0 {
+		t.Errorf("reduction_cbs: got %v", group["reduction_cbs"])
+	}
 }
 
 func TestIbsCbsCarriesAnExplicitBase(t *testing.T) {
