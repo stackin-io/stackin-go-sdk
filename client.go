@@ -44,6 +44,9 @@ type transport struct {
 	// country already.
 	Country string
 
+	// Company is sent as X-Stackin-Company on every request when set.
+	Company string
+
 	httpClient *http.Client
 }
 
@@ -75,6 +78,14 @@ func WithCountry(country string) Option {
 	return func(t *transport) { t.Country = country }
 }
 
+// WithCompany names the company every request acts on, by its id (UUID)
+// or its CNPJ, punctuated or not. It is sent as the X-Stackin-Company
+// header. Only a credential covering several companies needs it; an API
+// key is one company already. Left empty, nothing is sent.
+func WithCompany(company string) Option {
+	return func(t *transport) { t.Company = company }
+}
+
 func newTransport(opts ...Option) transport {
 	t := transport{
 		BaseURL: resolveBaseURL(),
@@ -92,6 +103,16 @@ func newTransport(opts ...Option) transport {
 
 func NewInvoice(opts ...Option) *Invoice {
 	return &Invoice{transport: newTransport(opts...)}
+}
+
+// ForCompany returns a copy of the client bound to another company, for
+// the calls chained on it: inv.ForCompany("00.000.000/0001-91").Issue(req).
+// The receiver is left as it was and the copy shares its HTTP client. An
+// empty company sends no header at all.
+func (inv *Invoice) ForCompany(company string) *Invoice {
+	bound := *inv
+	bound.Company = company
+	return &bound
 }
 
 func resolveBaseURL() string {
@@ -703,6 +724,9 @@ func (inv *transport) send(method, path string, payload any, params url.Values, 
 	}
 	if cfg.idempotencyKey != "" {
 		httpReq.Header.Set("Idempotency-Key", cfg.idempotencyKey)
+	}
+	if inv.Company != "" {
+		httpReq.Header.Set("X-Stackin-Company", inv.Company)
 	}
 
 	resp, err := inv.httpClient.Do(httpReq)
