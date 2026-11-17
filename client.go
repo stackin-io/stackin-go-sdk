@@ -31,7 +31,7 @@ var environmentURLs = map[Environment]string{
 	Production: DefaultBaseURL,
 }
 
-// transport is where an API key becomes an HTTP call. Invoice,
+// transport is where an API key becomes an HTTP call. Invoice, Clients,
 // FiscalReference and Taxpayer all embed it, so one option type
 // configures every entry point and one code path issues every request.
 type transport struct {
@@ -175,6 +175,19 @@ type IssueRequest struct {
 	// Export is where the goods leave Brazil, required for an outgoing
 	// NF-e to a buyer abroad. Omitted when nil.
 	Export *Export
+
+	// ClientID names a saved client of the company (see Clients). Its
+	// name, tax id, foreign id and address fill whichever of ClientName,
+	// TaxID, ForeignID and RecipientAddress are left empty; the ones set
+	// win, and the empty ones are left out of the request. The address
+	// checks then apply only to a RecipientAddress that is set: the API
+	// checks the merged request. Omitted when empty.
+	ClientID string
+
+	// UpdateClient rewrites an existing client with this request's
+	// recipient data after a successful issuance; a new recipient is
+	// saved as a client either way. Sent only when true.
+	UpdateClient bool
 }
 
 // RequestOption tunes a single call, as opposed to Option, which tunes the
@@ -414,14 +427,16 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 				)}
 			}
 		}
-		if err := validateNFEAddress(req.RecipientAddress); err != nil {
-			return nil, err
+		if req.RecipientAddress != nil || req.ClientID == "" {
+			if err := validateNFEAddress(req.RecipientAddress); err != nil {
+				return nil, err
+			}
 		}
 		if err := validateLatin1(req); err != nil {
 			return nil, err
 		}
 	}
-	if req.DocumentType == NFSE {
+	if req.DocumentType == NFSE && (req.RecipientAddress != nil || req.ClientID == "") {
 		if err := validateRetainedISSAddress(req); err != nil {
 			return nil, err
 		}
@@ -440,6 +455,18 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	}
 	if req.TaxID == "" && req.DocumentType == NFE && req.RecipientAddress.abroad() {
 		delete(payload, "tax_id")
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+		if req.ClientName == "" {
+			delete(payload, "client_name")
+		}
+		if req.TaxID == "" {
+			delete(payload, "tax_id")
+		}
+	}
+	if req.UpdateClient {
+		payload["update_client"] = true
 	}
 	if req.RecipientAddress != nil {
 		payload["recipient_address"] = req.RecipientAddress
