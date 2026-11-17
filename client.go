@@ -781,14 +781,16 @@ func (inv *transport) send(method, path string, payload any, params url.Values, 
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		detail := string(raw)
+		var structured json.RawMessage
 		if d, ok := parsed["detail"]; ok {
 			if s, ok := d.(string); ok {
 				detail = s
 			} else if b, err := json.Marshal(d); err == nil {
 				detail = string(b)
+				structured = b
 			}
 		}
-		return nil, &APIError{StatusCode: resp.StatusCode, Detail: detail}
+		return nil, newAPIError(resp.StatusCode, detail, structured)
 	}
 
 	return raw, nil
