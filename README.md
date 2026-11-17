@@ -344,6 +344,42 @@ Realizada. Only the last one takes a reason, and it requires one — both rules 
 checked locally, before the request goes out, because a round trip to be told a
 fixed rule is a round trip wasted.
 
+## Saved clients
+
+The company keeps the recipients it issues to. A successful issuance saves a new recipient on its own; `Clients` reads and edits them, and `IssueRequest.ClientID` issues to one without retyping it.
+
+```go
+clients := stackin.NewClients(stackin.WithAPIKey("..."))
+
+page, err := clients.List(stackin.ClientQuery{Search: "acme", Limit: 20}) // active ones, by name
+inactive := false
+clients.List(stackin.ClientQuery{IsActive: &inactive})                  // the deactivated ones
+
+acme, err := clients.Create(stackin.ClientFields{Name: "ACME Ltda", TaxID: "11.222.333/0001-81"})
+var exists *stackin.ClientAlreadyExistsError
+if errors.As(err, &exists) {
+	acme, err = clients.Get(exists.ClientID) // it was there already
+}
+id := acme["id"].(string)
+
+phone, empty := "+5511999999999", ""
+clients.Update(id, stackin.ClientChanges{Phone: &phone, Notes: &empty}) // "" clears
+clients.Deactivate(id)                                                  // kept, hidden from List
+clients.Reactivate(id)
+
+stackin.NewInvoice(stackin.WithAPIKey("...")).Issue(stackin.IssueRequest{
+	DocumentType: stackin.NFSE,
+	ClientID:     id, // name, tax id, address from it
+	Items:        items,
+})
+```
+
+- `List` filters by `Search` (part of the name, the tax id masked or not, or the foreign id), `Source` (`manual`, `issued`, `issuance`) and `IsActive` (nil lists the active clients, as the API does), and pages with `Limit`/`Offset`. `SortBy` takes `name`, `last_used_at`, `created_at` or `uses_count`.
+- `Update` sends only the fields set in `ClientChanges`: a nil pointer is left alone, one pointing at `""` clears the field, `Address` replaces the whole address and `ClearAddress` removes it. The API checks the client as a whole, so clearing a Brazilian client's tax id is refused like a create without one.
+- On `Issue`, the client fills whichever of `ClientName`, `TaxID`, `ForeignID` and `RecipientAddress` are empty; the ones set win, and the empty ones are left out of the request. With `ClientID` the address checks apply only to a `RecipientAddress` that is set: the API checks the merged request. A deactivated client is refused there (422) until it is reactivated.
+- `UpdateClient: true` rewrites an existing client with that request's recipient data. Left false, the issuance only counts one more use of it.
+- Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `WithCompany` and `ForCompany` work here as on `Invoice`.
+
 ## Several companies on one credential
 
 An API key is one company and needs nothing here: with no company set, requests are exactly what they were before. A credential authorized for several companies (an OAuth connection) has to say which one each call acts on, by the company id or its CNPJ (punctuation is ignored). It goes out as the `X-Stackin-Company` header on every request, lookups included.
@@ -409,6 +445,7 @@ Three things worth knowing before you loop:
 
 - `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated.
 - `*stackin.CompanyRequiredError`, `*stackin.CompanyNotInScopeError`, `*stackin.InsufficientPermissionError` — the company or permission answers described under [Several companies on one credential](#several-companies-on-one-credential). Each wraps an `*APIError`.
+- `*stackin.ClientAlreadyExistsError` — 409 `CLIENT_EXISTS`: `Clients.Create` or `Update` with a tax id or foreign id the company already has on another client. `ClientID` names that client. It wraps an `*APIError`.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
 - `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, a missing/incomplete `RecipientAddress` on NFE, or any other check listed under [Checked before the request goes out](#checked-before-the-request-goes-out).
 
