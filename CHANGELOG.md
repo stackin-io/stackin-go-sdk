@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.15.0 — 2026-11-16
+
+### Features
+- **errors:** type company_required, company_not_in_scope and INSUFFICIENT_PERMISSION (#31)
+- **client:** list the companies a credential covers with Companies (#31)
+- **client:** select the company per client and per call with X-Stackin-Company (#31)
+
+### Docs
+- **readme:** document company selection, Companies and the company errors (#31)
+
+### Tests
+- **client:** cover the company header, Companies and the three company errors (#31)
+
 ## v0.14.0 — 2026-11-15
 
 ### Features
