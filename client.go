@@ -676,6 +676,40 @@ func (inv *Invoice) Submissions(invoiceID string) ([]map[string]any, error) {
 	return parsed, nil
 }
 
+// AuthorizedCompany is one company a credential may act on, and the
+// permissions it holds there.
+type AuthorizedCompany struct {
+	CompanyID   string   `json:"company_id"`
+	Name        string   `json:"name"`
+	TaxID       string   `json:"tax_id"`
+	Permissions []string `json:"permissions"`
+}
+
+// AuthorizedCompanies is every company a credential covers, in one
+// environment.
+type AuthorizedCompanies struct {
+	Environment string              `json:"environment"`
+	Companies   []AuthorizedCompany `json:"companies"`
+}
+
+// Companies lists the companies this credential reaches, with the
+// permissions it holds on each: the ids WithCompany and ForCompany
+// accept. An API key lists as its one company with every permission.
+func (inv *Invoice) Companies() (*AuthorizedCompanies, error) {
+	raw, err := inv.send(http.MethodGet, "/me/companies", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed AuthorizedCompanies
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, &InvoiceError{Message: "unexpected response shape: " + err.Error()}
+		}
+	}
+	return &parsed, nil
+}
+
 func (inv *transport) request(method, path string, payload any, params url.Values, opts ...RequestOption) (map[string]any, error) {
 	raw, err := inv.send(method, path, payload, params, opts...)
 	if err != nil {
