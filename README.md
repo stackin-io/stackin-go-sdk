@@ -180,6 +180,20 @@ item := br.Product{
 }
 ```
 
+An item's IBS/CBS group (Reforma Tributária) is `br.IbsCbs`, sent under the item's `br.ibs_cbs` key: `CST`, `Classification` (cClassTrib), `RateState`, `RateCity` and `RateFederal`, plus `Base`, `ReductionIbs` and `ReductionCbs`, which are sent only when set. `ReductionIbs` is the IBS pRedAliq (state and municipality) and `ReductionCbs` the CBS pRedAliq, both in percent (0–100): the cClassTrib's `pRedIBS` and `pRedCBS` in the official classification table. The API asks for them on CST 011, 200 and 515 and refuses them on any other; the SDK leaves that rule to the API.
+
+```go
+reduction := 60.0
+item := br.Product{
+	Description: "Medicamento", Amount: 100.00, NCM: &ncm, CFOP: &cfop,
+	IbsCbs: &br.IbsCbs{
+		CST: "200", Classification: "200009",
+		RateState: 0.1, RateFederal: 0.9,
+		ReductionIbs: &reduction, ReductionCbs: &reduction,
+	},
+}
+```
+
 The fiscal rules about these fields — the emission window, which purpose needs a referenced key, an export group on a note to Brazil — are the API's, and it answers them by name.
 
 ### Checked before the request goes out

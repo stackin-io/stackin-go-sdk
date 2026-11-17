@@ -15,6 +15,12 @@ type IbsCbs struct {
 	RateState      float64
 	RateCity       float64
 	RateFederal    float64
+	// ReductionIbs is the IBS pRedAliq (state and municipality), in percent:
+	// the cClassTrib's pRedIBS. Sent only when set.
+	ReductionIbs *float64
+	// ReductionCbs is the CBS pRedAliq, in percent: the cClassTrib's pRedCBS.
+	// Sent only when set.
+	ReductionCbs *float64
 }
 
 func (g IbsCbs) toMap() map[string]any {
@@ -26,6 +32,8 @@ func (g IbsCbs) toMap() map[string]any {
 		"rate_federal":   g.RateFederal,
 	}
 	setIfNotNil(data, "base", g.Base)
+	setIfNotNil(data, "reduction_ibs", g.ReductionIbs)
+	setIfNotNil(data, "reduction_cbs", g.ReductionCbs)
 	return data
 }
 
