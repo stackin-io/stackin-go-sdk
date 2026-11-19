@@ -767,8 +767,7 @@ func TestUnknownResponseFieldReachesTheCaller(t *testing.T) {
 }
 
 // Pdf is the only method returning bytes; a JSON round trip would corrupt
-// the document, and the authorizer's endpoint for it is unstable by its
-// own documentation, so a 502 must stay distinguishable from a bad note.
+// the document.
 func TestPdfReturnsTheBytesUntouched(t *testing.T) {
 	body := []byte("%PDF-1.4 fake document")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -794,30 +793,33 @@ func TestPdfReturnsTheBytesUntouched(t *testing.T) {
 	}
 }
 
-func TestPdfSurfacesAnUnavailableAuthorizer(t *testing.T) {
+// The API draws the DANFE for an NF-e itself, so Pdf is not NFS-e only.
+func TestPdfReadsTheDanfeOfAnNFE(t *testing.T) {
+	body := []byte("%PDF-1.4 danfe")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte(`{"detail":"authorizer unavailable"}`))
+		if got := r.URL.Query().Get("document_type"); got != "nfe" {
+			t.Errorf("document_type = %q, want nfe", got)
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		_, _ = w.Write(body)
 	}))
 	defer server.Close()
 
 	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
 
-	_, err := inv.Pdf("abc123", NFSE)
-
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("error = %v, want *APIError", err)
+	got, err := inv.Pdf("abc123", NFE)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if apiErr.StatusCode != http.StatusBadGateway {
-		t.Errorf("StatusCode = %d, want 502", apiErr.StatusCode)
+	if string(got) != string(body) {
+		t.Errorf("Pdf() = %q, want %q", got, body)
 	}
 }
 
-func TestPdfSurfacesNotImplementedForNFE(t *testing.T) {
+func TestPdfSurfacesAnAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
-		_, _ = w.Write([]byte(`{"detail":"a PDF isn't available for nfe yet"}`))
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"detail":"invoice not found"}`))
 	}))
 	defer server.Close()
 
@@ -829,13 +831,14 @@ func TestPdfSurfacesNotImplementedForNFE(t *testing.T) {
 	if !errors.As(err, &apiErr) {
 		t.Fatalf("error = %v, want *APIError", err)
 	}
-	if apiErr.StatusCode != http.StatusNotImplemented {
-		t.Errorf("StatusCode = %d, want 501", apiErr.StatusCode)
+	if apiErr.StatusCode != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want 404", apiErr.StatusCode)
 	}
 }
 
-// Received reads what the API already collected: the SEFAZ caps how many
-// times a CNPJ may ask, so a listing must never reach the authorizer.
+// Received reads what the API already collected: the SEFAZ makes a CNPJ
+// wait an hour after a read that finds nothing more, so a listing must
+// never reach the authorizer.
 func TestReceivedListsWithoutPagination(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/received-invoices" {

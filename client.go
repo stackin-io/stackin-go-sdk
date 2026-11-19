@@ -591,8 +591,13 @@ func (e *InvoiceError) Error() string {
 // Received lists documents other companies issued against this one.
 //
 // Reads what the API already collected; it does not call the authorizer.
-// Collecting runs on a schedule there, because the SEFAZ caps how many
-// times a CNPJ may ask per day.
+// Collecting runs on a schedule there, every six hours, and SyncReceived
+// asks for it now. After a read that finds nothing more the SEFAZ makes the
+// CNPJ wait an hour before the next one.
+//
+// The first 50 received documents a month are included in every plan; each
+// one after that takes R$ 0,05 from the account credit. Some accounts are
+// exempt: Usage().ReceivedFree tells.
 func (inv *Invoice) Received(limit, offset int) (map[string]any, error) {
 	params := url.Values{}
 	if limit > 0 {
@@ -684,12 +689,10 @@ func (inv *Invoice) Manifest(accessKey string, manifestation Manifestation, reas
 	)
 }
 
-// Pdf returns the authorizer's own rendering of an authorized document,
-// as raw bytes — the only method that does not return a parsed object.
-// The XML is the legally valid document; this is a convenience, and the
-// authorizer's endpoint for it is unstable, so an APIError with status
-// 502 means the authorizer is unavailable, not that the invoice is
-// wrong. NFS-e only.
+// Pdf returns the printable rendering of an authorized document, as raw
+// bytes — the only method that does not return a parsed object. The API
+// draws it itself from the authorized XML: the DANFE for an NF-e, the
+// DANFSe for an NFS-e. The XML stays the legally valid document.
 func (inv *Invoice) Pdf(accessKey string, documentType DocumentType) ([]byte, error) {
 	params := url.Values{"document_type": {string(documentType)}}
 	return inv.send(http.MethodGet, "/invoices/"+accessKey+"/pdf", nil, params)
