@@ -490,7 +490,7 @@ Three things worth knowing before you loop:
 - `*stackin.CompanyRequiredError`, `*stackin.CompanyNotInScopeError`, `*stackin.InsufficientPermissionError` — the company or permission answers described under [Several companies on one credential](#several-companies-on-one-credential). Each wraps an `*APIError`.
 - `*stackin.ClientAlreadyExistsError` — 409 `CLIENT_EXISTS`: `Clients.Create` or `Update` with a tax id or foreign id the company already has on another client. `ClientID` names that client. It wraps an `*APIError`.
 - `*stackin.PaymentRequiredError` — any 402: the plan's allowance is spent and neither an overage price nor the account credit covers the call; `Detail` says why. It wraps an `*APIError`.
-- `*stackin.RateLimitedError` — any 429. `RetryAfter` is the `Retry-After` header in seconds; `Code` and `RetryAt` are set when the body carries them (`DISTRIBUTION_COOLDOWN` on `SyncReceived`). It wraps an `*APIError`.
+- `*stackin.RateLimitedError` — any 429. `RetryAfter` is the `Retry-After` header in seconds (derived from `RetryAt` when the header is missing); `Code` and `RetryAt` are set when the body carries them (`DISTRIBUTION_COOLDOWN` on `SyncReceived`). It wraps an `*APIError`.
 - `*stackin.ClientInactiveError` — 422 `CLIENT_INACTIVE`: the saved client `ClientID` is deactivated; reactivate it first. It wraps an `*APIError`.
 - `*stackin.ClientNotFoundError` — 404 `CLIENT_NOT_FOUND`: no saved client of this company has that id. It wraps an `*APIError`.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).

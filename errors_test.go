@@ -158,3 +158,17 @@ func TestAPlain404AndAnOther422StayAPIError(t *testing.T) {
 		}
 	}
 }
+
+func TestA429WithoutTheHeaderDerivesRetryAfterFromRetryAt(t *testing.T) {
+	at := time.Now().Add(10 * time.Minute).UTC().Format(time.RFC3339)
+	err := errorFrom(t, http.StatusTooManyRequests, nil,
+		`{"detail":"wait","code":"DISTRIBUTION_COOLDOWN","retry_at":"`+at+`"}`)
+
+	var limited *RateLimitedError
+	if !errors.As(err, &limited) {
+		t.Fatalf("error = %T, want *RateLimitedError", err)
+	}
+	if limited.RetryAfter < 540 || limited.RetryAfter > 600 {
+		t.Errorf("RetryAfter = %d, want about 600", limited.RetryAfter)
+	}
+}

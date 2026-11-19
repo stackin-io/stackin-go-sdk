@@ -94,7 +94,8 @@ func (e *PaymentRequiredError) Unwrap() error {
 }
 
 // RateLimitedError is any 429. RetryAfter is the Retry-After header in
-// seconds, zero when absent. RetryAt and Code come from the body when it
+// seconds; without the header it is derived from RetryAt, and zero when
+// neither is there. RetryAt and Code come from the body when it
 // carries them: DISTRIBUTION_COOLDOWN is the SEFAZ's one-hour wait after
 // a received-invoices read that found nothing more. errors.As still finds
 // the *APIError inside.
@@ -194,6 +195,11 @@ func newRateLimitedError(base APIError, raw json.RawMessage, body []byte, header
 	limited.Code = fields.Code
 	if at, ok := parseAPITime(fields.RetryAt); ok {
 		limited.RetryAt = &at
+		if limited.RetryAfter == 0 {
+			if wait := int(time.Until(at).Seconds()); wait > 0 {
+				limited.RetryAfter = wait
+			}
+		}
 	}
 	return limited
 }
