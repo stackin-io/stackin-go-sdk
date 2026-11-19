@@ -613,6 +613,13 @@ type HistoryQuery struct {
 	Offset       int
 	SortBy       string
 	OrderBy      string
+
+	// ExternalReference finds the documents issued with exactly this
+	// IssueRequest.ExternalReference.
+	ExternalReference string
+
+	// Fields set to "summary" returns a lighter item per invoice.
+	Fields string
 }
 
 // History lists what this company issued, newest first.
@@ -638,6 +645,12 @@ func (inv *Invoice) History(query HistoryQuery) (map[string]any, error) {
 	}
 	if query.OrderBy != "" {
 		params.Set("order_by", query.OrderBy)
+	}
+	if query.ExternalReference != "" {
+		params.Set("external_reference", query.ExternalReference)
+	}
+	if query.Fields != "" {
+		params.Set("fields", query.Fields)
 	}
 	return inv.request(http.MethodGet, "/invoices", nil, params)
 }
