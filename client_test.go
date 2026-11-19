@@ -946,24 +946,28 @@ func TestHistoryPassesEveryFilterThrough(t *testing.T) {
 	inv := NewInvoice(WithAPIKey("key"), WithBaseURL(server.URL))
 
 	_, err := inv.History(HistoryQuery{
-		DocumentType: NFE,
-		Status:       "rejected",
-		Limit:        10,
-		Offset:       20,
-		SortBy:       "created_at",
-		OrderBy:      "asc",
+		DocumentType:      NFE,
+		Status:            "rejected",
+		Limit:             10,
+		Offset:            20,
+		SortBy:            "created_at",
+		OrderBy:           "asc",
+		ExternalReference: "order-1234",
+		Fields:            "summary",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	want := map[string]string{
-		"document_type": "nfe",
-		"status":        "rejected",
-		"limit":         "10",
-		"offset":        "20",
-		"sort_by":       "created_at",
-		"order_by":      "asc",
+		"document_type":      "nfe",
+		"status":             "rejected",
+		"limit":              "10",
+		"offset":             "20",
+		"sort_by":            "created_at",
+		"order_by":           "asc",
+		"external_reference": "order-1234",
+		"fields":             "summary",
 	}
 	for key, value := range want {
 		if seen.Get(key) != value {
