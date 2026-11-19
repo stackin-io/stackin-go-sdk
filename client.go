@@ -817,7 +817,7 @@ func (inv *transport) send(method, path string, payload any, params url.Values, 
 				structured = b
 			}
 		}
-		return nil, newAPIError(resp.StatusCode, detail, structured)
+		return nil, newAPIError(resp.StatusCode, detail, structured, raw, resp.Header)
 	}
 
 	return raw, nil
