@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.18.0 — 2026-11-18
+
+### Features
+- **history:** external_reference and fields filters (#36)
+- **company:** Usage and SyncReceived (#36)
+- **errors:** type 402, 429, CLIENT_INACTIVE and CLIENT_NOT_FOUND (#36)
+
+### Bug Fixes
+- **errors:** derive RetryAfter from retry_at when the header is missing (#36)
+
+### Docs
+- PDF for NF-e too, received-invoice wait and pricing, new methods and errors (#36)
+
 ## v0.17.0 — 2026-11-17
 
 ### Features
