@@ -18,7 +18,7 @@
 
 Go SDK for issuing, consulting and cancelling electronic invoices — a handful of business fields, nothing about certificates, XML, XSD, signing or SOAP. The API resolves all of that from the issuer's own configuration, identified by `api_key`.
 
-**One struct, `Invoice`** — `Issue()`/`Consult()`/`Cancel()`/`Reissue()`/`Correct()`/`Invalidate()`/`Pdf()`/`Received()`/`Manifest()`, nothing else to instantiate. Each line item is a `br.Product` — `Description`/`Amount` apply to any document type, `NCM`/`CFOP` (plus everything else on `Product`: `CEST`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE.
+**One struct, `Invoice`** — `Issue()`/`Consult()`/`Cancel()`/`Reissue()`/`Correct()`/`Invalidate()`/`Pdf()`/`History()`/`Submissions()`/`Received()`/`SyncReceived()`/`Manifest()`/`Usage()`, nothing else to instantiate. Each line item is a `br.Product` — `Description`/`Amount` apply to any document type, `NCM`/`CFOP` (plus everything else on `Product`: `CEST`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE.
 
 ## What a line item is worth
 
@@ -102,8 +102,9 @@ func main() {
 		},
 		ExternalReference: "order-1234",
 	})
-	// The authorizer's PDF, as raw bytes. NFS-e only; the XML stays the
-	// legally valid document, and a 502 here means the authorizer is down.
+	// The PDF, as raw bytes, drawn by the API from the authorized XML: the
+	// DANFE for an NF-e, the DANFSe for an NFS-e. The XML stays the legally
+	// valid document.
 	document, err := client.Pdf("ACCESS_KEY...", stackin.NFSE)
 	err = os.WriteFile("nota.pdf", document, 0o644)
 
@@ -112,7 +113,7 @@ func main() {
 }
 ```
 
-`ExternalReference` is your own id for the document — an order number, a ticket. It is sent as `external_reference` (left out when empty), stored as sent (at most 255 characters), returned on every read and webhook, and `GET /invoices?external_reference=` finds the document by it.
+`ExternalReference` is your own id for the document — an order number, a ticket. It is sent as `external_reference` (left out when empty), stored as sent (at most 255 characters), returned on every read and webhook, and `History(stackin.HistoryQuery{ExternalReference: "order-1234"})` finds the document by it (exact match).
 
 `RecipientAddress` is an `Address` — the buyer's address, **required for NFE**. On NFE `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` are required: it becomes `enderDest` on the wire and the SEFAZ rejects a partial one. `CityCode` (the 7-digit IBGE municipality code) may be left out — the API resolves it from `City` and `State`, and answers `CITY_NOT_FOUND` (422) when it cannot; send it yourself when the name is ambiguous. `State` is also what resolves `idDest` — a buyer in another state is emitted as an interstate operation automatically. On NFSE it is the tomador's address: optional, except when any item has `TaxRetained` (the tomador withholds the ISSQN), where it is required with every field except `CityCode`. A missing or incomplete NFE address, or a missing or incomplete one on an NFSE with a retained item, returns an `*InvoiceError` locally, before the request goes out.
 
@@ -313,11 +314,27 @@ round trip — and the authorizer checks again for what we can't see from here.
 Everything above serves the **issuer**. These two serve the **recipient**: what
 suppliers billed to this CNPJ, and the formal answer to it.
 
-Reading the list never calls the SEFAZ. The authorizer caps how many times a CNPJ
-may ask for its distribution per day, so collecting runs on a schedule on the API
-side and a page refresh cannot spend that allowance.
+Reading the list never calls the SEFAZ. Collecting runs on a schedule on the API
+side, every six hours, and `SyncReceived()` asks for it now. After a read that
+finds nothing more the SEFAZ makes the CNPJ wait an hour; a sync inside that wait
+comes back as a `*stackin.RateLimitedError` with `Code` `DISTRIBUTION_COOLDOWN`,
+`RetryAt` and `RetryAfter` (seconds).
+
+The first 50 received documents a month are included in every plan; each one
+after that takes R$ 0,05 from the account credit. Some existing accounts are
+exempt, and `Usage().ReceivedFree` says whether this one is.
 
 ```go
+sync, err := client.SyncReceived()
+var limited *stackin.RateLimitedError
+if errors.As(err, &limited) {
+    fmt.Println("next read allowed at", limited.RetryAt)
+} else if err != nil {
+    log.Fatal(err)
+} else {
+    fmt.Println(sync.Stored, "new documents")
+}
+
 page, err := client.Received(20, 0)
 if err != nil {
     log.Fatal(err)
@@ -343,6 +360,32 @@ Operação, `210220` Desconhecimento da Operação and `210240` Operação não
 Realizada. Only the last one takes a reason, and it requires one — both rules are
 checked locally, before the request goes out, because a round trip to be told a
 fixed rule is a round trip wasted.
+
+## What was issued, and the plan behind it
+
+`History` lists what this company issued, newest first. `ExternalReference` finds
+the documents issued with exactly that reference, and `Fields: "summary"` returns a
+lighter item per invoice.
+
+```go
+page, err := client.History(stackin.HistoryQuery{
+	ExternalReference: "order-1234",
+	Fields:            "summary",
+	Limit:             20,
+})
+
+usage, err := client.Usage() // GET /api/v1/company/usage
+fmt.Println(usage.PlanName, usage.UsedInvoices, "/", usage.IncludedInvoices)
+fmt.Println(usage.UsedReceived, "/", usage.IncludedReceived, "received, free:", usage.ReceivedFree)
+fmt.Println("credit (cents):", usage.CreditBalance)
+```
+
+`Usage()` returns a `*stackin.Usage`: `PlanName`, `PlanSlug`, `IncludedInvoices`,
+`UsedInvoices`, `OveragePriceCents` (nil when the plan has no overage),
+`IncludedReceived`, `UsedReceived`, `ReceivedPriceCents`, `ReceivedFree`,
+`CurrentPeriodStart`, `CurrentPeriodEnd` (nil when open-ended), `CreditBalance`
+(cents) and `CompaniesOnAccount`. The numbers are the paying account's, shared by
+every company it holds.
 
 ## Saved clients
 
@@ -376,7 +419,7 @@ stackin.NewInvoice(stackin.WithAPIKey("...")).Issue(stackin.IssueRequest{
 
 - `List` filters by `Search` (part of the name, the tax id masked or not, or the foreign id), `Source` (`manual`, `issued`, `issuance`) and `IsActive` (nil lists the active clients, as the API does), and pages with `Limit`/`Offset`. `SortBy` takes `name`, `last_used_at`, `created_at` or `uses_count`.
 - `Update` sends only the fields set in `ClientChanges`: a nil pointer is left alone, one pointing at `""` clears the field, `Address` replaces the whole address and `ClearAddress` removes it. The API checks the client as a whole, so clearing a Brazilian client's tax id is refused like a create without one.
-- On `Issue`, the client fills whichever of `ClientName`, `TaxID`, `ForeignID` and `RecipientAddress` are empty; the ones set win, and the empty ones are left out of the request. With `ClientID` the address checks apply only to a `RecipientAddress` that is set: the API checks the merged request. A deactivated client is refused there (422) until it is reactivated.
+- On `Issue`, the client fills whichever of `ClientName`, `TaxID`, `ForeignID` and `RecipientAddress` are empty; the ones set win, and the empty ones are left out of the request. With `ClientID` the address checks apply only to a `RecipientAddress` that is set: the API checks the merged request. A deactivated client is refused there with a `*stackin.ClientInactiveError` (422) until it is reactivated.
 - `UpdateClient: true` rewrites an existing client with that request's recipient data. Left false, the issuance only counts one more use of it.
 - Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `WithCompany` and `ForCompany` work here as on `Invoice`.
 
@@ -446,6 +489,10 @@ Three things worth knowing before you loop:
 - `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated.
 - `*stackin.CompanyRequiredError`, `*stackin.CompanyNotInScopeError`, `*stackin.InsufficientPermissionError` — the company or permission answers described under [Several companies on one credential](#several-companies-on-one-credential). Each wraps an `*APIError`.
 - `*stackin.ClientAlreadyExistsError` — 409 `CLIENT_EXISTS`: `Clients.Create` or `Update` with a tax id or foreign id the company already has on another client. `ClientID` names that client. It wraps an `*APIError`.
+- `*stackin.PaymentRequiredError` — any 402: the plan's allowance is spent and neither an overage price nor the account credit covers the call; `Detail` says why. It wraps an `*APIError`.
+- `*stackin.RateLimitedError` — any 429. `RetryAfter` is the `Retry-After` header in seconds; `Code` and `RetryAt` are set when the body carries them (`DISTRIBUTION_COOLDOWN` on `SyncReceived`). It wraps an `*APIError`.
+- `*stackin.ClientInactiveError` — 422 `CLIENT_INACTIVE`: the saved client `ClientID` is deactivated; reactivate it first. It wraps an `*APIError`.
+- `*stackin.ClientNotFoundError` — 404 `CLIENT_NOT_FOUND`: no saved client of this company has that id. It wraps an `*APIError`.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
 - `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, a missing/incomplete `RecipientAddress` on NFE, or any other check listed under [Checked before the request goes out](#checked-before-the-request-goes-out).
 
