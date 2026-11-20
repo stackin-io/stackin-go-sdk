@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // segment escapes one path segment, refusing the ones that would leave
@@ -176,6 +177,52 @@ func firstNonEmpty(value, fallback string) string {
 
 func decodeStrings(raw []byte) ([]string, error) {
 	var parsed []string
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, &InvoiceError{Message: "unexpected response shape: " + err.Error()}
+		}
+	}
+	return parsed, nil
+}
+
+// CityQuery narrows a city lookup. Both fields are optional.
+type CityQuery struct {
+	// State is one UF, two letters.
+	State string
+	// Country overrides the client's own, ISO 3166-1 alpha-2.
+	Country string
+}
+
+// Cities lists the municipalities whose name starts with name, with their
+// code. Each row is {country, code, name, state}; for Brazil code is the
+// 7-digit IBGE code an Address's CityCode takes. Issuing resolves it from
+// City and State by itself, so this is for the name that matches more
+// than one. The API answers at most 20 rows.
+func (r *FiscalReference) Cities(name string, query CityQuery) ([]map[string]any, error) {
+	length := len([]rune(name))
+	if length < 2 || length > 100 {
+		return nil, &InvoiceError{Message: "name must be 2 to 100 characters"}
+	}
+	if query.State != "" && len([]rune(query.State)) != 2 {
+		return nil, &InvoiceError{Message: "state must be a two-letter code"}
+	}
+
+	params := url.Values{}
+	params.Set("name", name)
+	params.Set("country", firstNonEmpty(query.Country, r.Country))
+	if query.State != "" {
+		params.Set("state", strings.ToUpper(query.State))
+	}
+
+	raw, err := r.send("GET", "/cities", nil, params)
+	if err != nil {
+		return nil, err
+	}
+	return decodeRows(raw)
+}
+
+func decodeRows(raw []byte) ([]map[string]any, error) {
+	var parsed []map[string]any
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &parsed); err != nil {
 			return nil, &InvoiceError{Message: "unexpected response shape: " + err.Error()}
