@@ -705,7 +705,11 @@ func (inv *Invoice) Pdf(accessKey string, documentType DocumentType) ([]byte, er
 // like Reissue and unlike everything else, because a rejected document has
 // no access key to look it up by.
 func (inv *Invoice) Submissions(invoiceID string) ([]map[string]any, error) {
-	raw, err := inv.send(http.MethodGet, "/invoices/"+invoiceID+"/submissions", nil, nil)
+	id, err := segment(invoiceID)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := inv.send(http.MethodGet, "/invoices/"+id+"/submissions", nil, nil)
 	if err != nil {
 		return nil, err
 	}
