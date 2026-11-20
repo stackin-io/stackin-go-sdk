@@ -18,7 +18,7 @@
 
 Go SDK for issuing, consulting and cancelling electronic invoices — a handful of business fields, nothing about certificates, XML, XSD, signing or SOAP. The API resolves all of that from the issuer's own configuration, identified by `api_key`.
 
-**One struct, `Invoice`** — `Issue()`/`Consult()`/`Cancel()`/`Reissue()`/`Correct()`/`Invalidate()`/`Pdf()`/`History()`/`Submissions()`/`Received()`/`SyncReceived()`/`Manifest()`/`Usage()`, nothing else to instantiate. Each line item is a `br.Product` — `Description`/`Amount` apply to any document type, `NCM`/`CFOP` (plus everything else on `Product`: `CEST`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE.
+**One struct, `Invoice`** — `Issue()`/`Consult()`/`Cancel()`/`Reissue()`/`Correct()`/`Invalidate()`/`Pdf()`/`History()`/`Submissions()`/`Received()`/`SyncReceived()`/`Manifest()`/`Usage()`/`Readiness()`/`Rejection()`/`Stats()`/`Classify()`/`Invalidations()`, nothing else to instantiate. Each line item is a `br.Product` — `Description`/`Amount` apply to any document type, `NCM`/`CFOP` (plus everything else on `Product`: `CEST`, tax groups, presumed credits...) are Brazil-specific and required per item for NFE, ignored for NFSE.
 
 ## What a line item is worth
 
@@ -195,6 +195,12 @@ item := br.Product{
 }
 ```
 
+`Contingency` — NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Left `false`, nothing is sent:
+
+```go
+inv.Issue(stackin.IssueRequest{ /* ... */ Contingency: true})
+```
+
 The fiscal rules about these fields — the emission window, which purpose needs a referenced key, an export group on a note to Brazil — are the API's, and it answers them by name.
 
 ### Checked before the request goes out
@@ -308,6 +314,53 @@ its own records first and answers `409` naming the offending numbers, without a
 round trip — and the authorizer checks again for what we can't see from here.
 
 **NF-e only**, and it takes no access key: there is no document to point at.
+
+Ranges already reported are listed, a page at a time, with the SEFAZ `status` and
+`protocol` of each — read it before reporting the same range twice:
+
+```go
+page, err := inv.Invalidations(stackin.PageQuery{Limit: 20})
+```
+
+## Before the first document, and after a refusal
+
+```go
+ready, err := inv.Readiness()          // GET /company
+if ready["ready"] == false {
+	fmt.Println(ready["missing"])       // certificate, certificate_expired, certificate_unreadable, address
+}
+
+why, err := inv.Rejection(invoiceID)   // a rejected document, by its local id
+fmt.Println(why["code"], why["explanation"], why["steps"], why["suggested"])
+
+stats, err := inv.Stats(7)             // totals, by type and status, this week against the last
+```
+
+`Readiness()` says whether the company can issue right now and, when it cannot,
+what is missing, plus the certificate's expiry, the tax regime (CRT) and the
+default série per document type. `Rejection()` reads the authorizer's answer
+(`Submissions()` has it raw) in plain words, with the field to fix and, when there
+is one, a suggested value; a document that is not rejected is an `*APIError` 409.
+`Stats()` takes `days` from 1 to 365, checked locally; `0` sends nothing and the
+API answers for 30.
+
+## Suggesting a classification
+
+```go
+suggestion, err := inv.Classify(stackin.ClassifyRequest{
+	Description:    "Cerveja artesanal IPA 500ml",
+	DocumentType:   stackin.NFE,
+	RecipientState: "SP",
+	Answers:        map[string]any{"purpose": "resale"}, // optional, from missing_information
+})
+best := suggestion["primary_candidate"] // ncm, cfop, cst/csosn, cest, confidence
+```
+
+**A suggestion, never a decision.** Every code in a candidate is read from the
+published tables, but the NCM and CFOP decide the tax owed: show it, have someone
+confirm it, and only then put it on an item. `missing_information` lists what
+would settle it; answer through `Answers` and ask again. `Description` is 3 to
+500 characters, checked locally.
 
 ## Documents issued against you
 
@@ -423,6 +476,30 @@ stackin.NewInvoice(stackin.WithAPIKey("...")).Issue(stackin.IssueRequest{
 - `UpdateClient: true` rewrites an existing client with that request's recipient data. Left false, the issuance only counts one more use of it.
 - Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `WithCompany` and `ForCompany` work here as on `Invoice`.
 
+## Webhooks
+
+`Webhooks` registers where the company's events are delivered: `invoice.authorized`,
+`invoice.rejected`, `invoice.cancelled` and `invoice.corrected` (`stackin.WebhookEvents`).
+An endpoint receives the events of the credential's own environment only.
+
+```go
+hooks := stackin.NewWebhooks(stackin.WithAPIKey("..."))
+
+endpoint, err := hooks.Create(stackin.WebhookEndpoint{
+	URL:    "https://shop.example/stackin",
+	Secret: os.Getenv("STACKIN_WEBHOOK_SECRET"),                 // 16 to 255 characters
+	Events: []string{"invoice.authorized", "invoice.rejected"}, // nil: every event
+})
+hooks.List()                                   // a plain list; secrets are never returned
+hooks.Deliveries(stackin.PageQuery{Limit: 20}) // every attempt: status, attempts, last_error
+hooks.Delete(endpoint["id"].(string))          // stops delivery, keeps the history
+```
+
+The secret signs every delivery and is not returned again, so keep it. An `https://`
+URL, the secret's length and the event names are checked locally; the API also
+refuses a URL that points at a private network. On an OAuth credential every call
+needs `webhook:manage`. `WithCompany` and `ForCompany` work here as on `Invoice`.
+
 ## Several companies on one credential
 
 An API key is one company and needs nothing here: with no company set, requests are exactly what they were before. A credential authorized for several companies (an OAuth connection) has to say which one each call acts on, by the company id or its CNPJ (punctuation is ignored). It goes out as the `X-Stackin-Company` header on every request, lookups included.
@@ -474,6 +551,12 @@ stackin.NewTaxpayer(stackin.WithAPIKey("...")).Get("00000000000191")
 
 `CFOP`, `NCM`, `CEST`, `CST`, `CSOSN`, `IssService`, `IcmsFuel` and `IbsCbsClass` have accessors. **`Kind(name)` reaches anything else**, including a classification published after this release — ask `Kinds()` rather than trusting this list.
 
+`Cities(name, CityQuery{State, Country})` lists the municipalities whose name starts with `name`, at most 20, each with its IBGE `code` — issuing resolves `CityCode` by itself, so this is for a name that matches more than one:
+
+```go
+ref.Cities("santa rita", stackin.CityQuery{State: "SP"}) // [{country: BR, code: ..., name: ..., state: SP}]
+```
+
 `metadata` comes back as the API sends it and differs per kind: `utrib` on an NCM, `ncm_code` on a CEST, `tax_type` on a CST, `nil` on an ISS service.
 
 Three things worth knowing before you loop:
@@ -494,7 +577,7 @@ Three things worth knowing before you loop:
 - `*stackin.ClientInactiveError` — 422 `CLIENT_INACTIVE`: the saved client `ClientID` is deactivated; reactivate it first. It wraps an `*APIError`.
 - `*stackin.ClientNotFoundError` — 404 `CLIENT_NOT_FOUND`: no saved client of this company has that id. It wraps an `*APIError`.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
-- `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, a missing/incomplete `RecipientAddress` on NFE, or any other check listed under [Checked before the request goes out](#checked-before-the-request-goes-out).
+- `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, a missing/incomplete `RecipientAddress` on NFE, or any other check listed under [Checked before the request goes out](#checked-before-the-request-goes-out). Also `Stats()` with `days` outside 1–365, `Classify()` with a `Description` outside 3–500 characters, a `DocumentType` other than NFE/NFSE or a `RecipientState` that is not two letters, `FiscalReference.Cities()` with a `name` outside 2–100 characters or a `State` that is not two letters, `Webhooks.Create()` with a URL that is not `https://`, a secret outside 16–255 characters or an event name not in `WebhookEvents`, and an invoice or endpoint id that is empty, `.` or `..` (ids are escaped as one path segment).
 
 Building the full fiscal document (issuer data, service code, tax groups, schema-accurate XML) is the API's job — configured once per company, not passed on every call.
 

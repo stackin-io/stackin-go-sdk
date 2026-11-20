@@ -184,6 +184,11 @@ type IssueRequest struct {
 	// checks the merged request. Omitted when empty.
 	ClientID string
 
+	// Contingency sends an NF-e through the UF's contingency authorizer
+	// (SVC-AN or SVC-RS, tpEmis 6/7) for when its own is down. Sent only
+	// when true.
+	Contingency bool
+
 	// UpdateClient rewrites an existing client with this request's
 	// recipient data after a successful issuance; a new recipient is
 	// saved as a client either way. Sent only when true.
@@ -501,6 +506,9 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	if req.Export != nil {
 		payload["export"] = req.Export
 	}
+	if req.Contingency {
+		payload["contingency"] = true
+	}
 
 	return inv.request(http.MethodPost, "/invoices", payload, nil,
 		WithIdempotencyKey(req.IdempotencyKey))
@@ -705,7 +713,11 @@ func (inv *Invoice) Pdf(accessKey string, documentType DocumentType) ([]byte, er
 // like Reissue and unlike everything else, because a rejected document has
 // no access key to look it up by.
 func (inv *Invoice) Submissions(invoiceID string) ([]map[string]any, error) {
-	raw, err := inv.send(http.MethodGet, "/invoices/"+invoiceID+"/submissions", nil, nil)
+	id, err := segment(invoiceID)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := inv.send(http.MethodGet, "/invoices/"+id+"/submissions", nil, nil)
 	if err != nil {
 		return nil, err
 	}
