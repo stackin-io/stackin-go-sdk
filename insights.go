@@ -123,10 +123,17 @@ func (inv *Invoice) Stats(days int) (map[string]any, error) {
 // Readiness says whether the company can issue right now, and if not, why
 // (GET /company).
 //
-// ready is false with missing naming the cause: certificate,
-// certificate_expired, certificate_unreadable or address. Also
-// certificate_expires_at, tax_regime (CRT), state and the default_series
-// per document type. Ask before a first document instead of failing it.
+// ready is true when at least one document type can be issued; when false,
+// missing names why: certificate, certificate_expired,
+// certificate_unreadable, address, state_registration (NF-e) or plan.
+// by_document_type breaks it down per nfe/nfse (ready, missing, warnings,
+// each issue a code plus, for address, the fields at fault) and fix_url is
+// the dashboard screen for the first blocker (nil when nothing blocks).
+// Also has_certificate, certificate_expires_at, tax_regime (CRT), state,
+// default_series per document type and suggested_fiscal_fields, what the
+// CNPJ registry suggests where it differs — never applied. The map keeps
+// whatever the API adds. Company.Update fixes the address and fiscal
+// fields. Ask before a first document instead of failing it.
 func (inv *Invoice) Readiness() (map[string]any, error) {
 	return inv.request(http.MethodGet, "/company", nil, nil)
 }
