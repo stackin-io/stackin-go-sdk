@@ -327,7 +327,8 @@ page, err := inv.Invalidations(stackin.PageQuery{Limit: 20})
 ```go
 ready, err := inv.Readiness()          // GET /company
 if ready["ready"] == false {
-	fmt.Println(ready["missing"])       // certificate, certificate_expired, certificate_unreadable, address
+	fmt.Println(ready["missing"])       // certificate, certificate_expired, certificate_unreadable, address, state_registration, plan
+	fmt.Println(ready["by_document_type"], ready["fix_url"])
 }
 
 why, err := inv.Rejection(invoiceID)   // a rejected document, by its local id
@@ -338,11 +339,44 @@ stats, err := inv.Stats(7)             // totals, by type and status, this week 
 
 `Readiness()` says whether the company can issue right now and, when it cannot,
 what is missing, plus the certificate's expiry, the tax regime (CRT) and the
-default série per document type. `Rejection()` reads the authorizer's answer
+default série per document type. `by_document_type` says it per `nfe`/`nfse`,
+with the address fields at fault; `fix_url` is the dashboard screen for the first
+blocker; `suggested_fiscal_fields` is what the CNPJ registry suggests, never
+applied. `Rejection()` reads the authorizer's answer
 (`Submissions()` has it raw) in plain words, with the field to fix and, when there
 is one, a suggested value; a document that is not rejected is an `*APIError` 409.
 `Stats()` takes `days` from 1 to 365, checked locally; `0` sends nothing and the
 API answers for 30.
+
+## Fixing the issuer
+
+`Company.Update()` (`PATCH /company`) fixes what `Readiness()` reports missing and
+answers the same fields, plus the stored `address` and `fiscal_fields`:
+
+```go
+company := stackin.NewCompany(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
+
+result, err := company.Update(stackin.CompanyUpdate{
+	Address: &stackin.CompanyAddress{
+		Street:           "Av. Paulista",
+		Number:           "1000",
+		Neighborhood:     "Bela Vista",
+		MunicipalityCode: "3550308", // 7-digit IBGE code, in the company's state
+		ZipCode:          "01310-100",
+	},
+	FiscalFields: &stackin.FiscalFields{TaxRegime: "1", SimplesNacional: "3"}, // owner only
+})
+fmt.Println(result["ready"], result["missing"])
+```
+
+Only what is set is sent. There is no complement, and the state changes only in
+the dashboard. `MunicipalityName` is derived from the code when left out. The
+municipality code (7 digits), the CEP (8 digits, mask stripped) and the
+`TaxRegime` (1–4), `SimplesNacional` and `SimplesApuracao` (1–3) codes are checked
+locally. `FiscalFields` are the company owner's alone: anyone else gets an
+`*APIError` 403. An OAuth credential needs `company:write`
+(`*InsufficientPermissionError` without it). A 503 means the IBGE table could not
+be read: nothing was written, retry after `Retry-After`.
 
 ## Suggesting a classification
 
