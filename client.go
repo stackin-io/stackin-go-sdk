@@ -179,7 +179,8 @@ type IssueRequest struct {
 	// ClientID names a saved client of the company (see Clients). Its
 	// name, tax id, foreign id and address fill whichever of ClientName,
 	// TaxID, ForeignID and RecipientAddress are left empty; the ones set
-	// win, and the empty ones are left out of the request. The address
+	// win, and the empty ones are left out of the request. Its e-mail and
+	// phone likewise fill ClientEmail and ClientPhone when empty. The address
 	// checks then apply only to a RecipientAddress that is set: the API
 	// checks the merged request. Omitted when empty.
 	ClientID string
