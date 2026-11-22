@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.23.0 — 2026-11-22
+
+### Breaking Changes
+- **ibs-cbs:** optional rates and operation_indicator on IbsCbs, simples_apuracao_ibs_cbs on FiscalFields
+
+### Features
+- **reference:** CalculateIbsCbs simulates IBS and CBS (#47)
+
+### Docs
+- **readme:** IBS/CBS simulation, NFS-e ibs_cbs shape and the rate pointer migration (#47)
+- **issue:** client_id also fills the recipient's e-mail and phone
+
 ## v0.22.1 — 2026-11-22
 
 ### Docs
