@@ -163,7 +163,7 @@ func TestProductToDictNFSeFields(t *testing.T) {
 		Amount:          1500.0,
 		ServiceCode:     ptr("1.06"),
 		ServiceDiscount: ptr(50.0),
-		TaxRetained:     true,
+		TaxRetained:     ptr(true),
 		Observations:    ptr("Nota de teste"),
 	}
 	data := p.ToDict()

@@ -22,7 +22,7 @@ func main() {
 		Description: "UI/UX design",
 		UnitPrice:   ptr(3200.00),
 		ServiceCode: ptr("1.03"),
-		TaxRetained: true,
+		TaxRetained: ptr(true),
 	}
 
 	result, err := client.Issue(stackin.IssueRequest{

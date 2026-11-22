@@ -482,7 +482,7 @@ func TestIssueRequiresRecipientAddressForRetainedISSOnNFSE(t *testing.T) {
 		TaxID:        "11222333000181",
 		Items: []br.Product{
 			{Description: "Consultoria", Amount: 10},
-			{Description: "Design", Amount: 10, TaxRetained: true},
+			{Description: "Design", Amount: 10, TaxRetained: ptr(true)},
 		},
 	})
 
@@ -497,7 +497,7 @@ func TestIssueSendsRetainedISSOnNFSEWithAnAddress(t *testing.T) {
 		DocumentType:     NFSE,
 		ClientName:       "Acme",
 		TaxID:            "11222333000181",
-		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: true}},
+		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: ptr(true)}},
 		RecipientAddress: validNFEAddress(),
 	})
 
@@ -516,7 +516,7 @@ func TestIssueRequiresACompleteAddressForRetainedISSOnNFSE(t *testing.T) {
 		DocumentType:     NFSE,
 		ClientName:       "Acme",
 		TaxID:            "11222333000181",
-		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: true}},
+		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: ptr(true)}},
 		RecipientAddress: &Address{Street: "Rua das Flores", City: "Joinville", State: "SC"},
 	})
 
@@ -533,7 +533,7 @@ func TestIssueDoesNotAskForCityCodeOnRetainedISS(t *testing.T) {
 		DocumentType:     NFSE,
 		ClientName:       "Acme",
 		TaxID:            "11222333000181",
-		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: true}},
+		Items:            []br.Product{{Description: "Design", Amount: 10, TaxRetained: ptr(true)}},
 		RecipientAddress: address,
 	})
 

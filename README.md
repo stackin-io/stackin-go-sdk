@@ -216,7 +216,7 @@ The fiscal rules about these fields — the emission window, which purpose needs
 - On NFE, a `RecipientAddress` with `State` `EX` (a buyer abroad) needs `CountryCode` instead of `ZipCode`.
 - `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
 - On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, the `Fuel` group's text fields, every `RecipientAddress` field, `ForeignID` and every `Export` field — is checked for characters the NF-e cannot carry. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and the error names the field and the character. Accented Portuguese and anything else in ISO-8859-1 (latin1) is fine; tabs and line breaks are collapsed into a space, and typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API (`‘ ’ ‚` to `'`, `“ ” „` to `"`, `– — −` and `•` to `-`, `…` to `...`, `€` to `EUR`, `™` to `TM`). The SDK sends them unchanged. NFSE is not checked.
-- On NFSE, an item with `TaxRetained: true` needs a `RecipientAddress` with `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` (`CityCode` optional): the ISSQN is retained by the tomador, and the city authorizer refuses the document without their address (`E0237`).
+- On NFSE, an item with `TaxRetained: ptr(true)` needs a `RecipientAddress` with `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` (`CityCode` optional): the ISSQN is retained by the tomador, and the city authorizer refuses the document without their address (`E0237`).
 
 ## Retrying safely
 
@@ -534,6 +534,48 @@ URL, the secret's length and the event names are checked locally; the API also
 refuses a URL that points at a private network. On an OAuth credential every call
 needs `webhook:manage`. `WithCompany` and `ForCompany` work here as on `Invoice`.
 
+## Items catalog
+
+The company keeps the products and services it sells in one catalog, told apart by `Kind` (`product` for an NF-e, `service` for an NFS-e). `Items` reads and edits it, and `br.Product.ItemID` issues a line from one without retyping it.
+
+```go
+items := stackin.NewItems(stackin.WithAPIKey("..."))
+
+page, err := items.List(stackin.ItemQuery{Kind: "product", Search: "cafe", Limit: 20}) // active ones, by description
+
+// Upsert by ExternalReference (or Code): created is true for a 201, false for a 200.
+// UnitPrice and ISSRetained are pointers: nil is not sent, &zero / &no are.
+price := 18.9
+coffee, created, err := items.Upsert(stackin.ItemFields{
+	Kind: "product", Description: "Cafe torrado 500g", Code: "CAF-500",
+	UnitPrice: &price, Unit: "UN", ExternalReference: "ns-variant-1", Source: "nuvemshop",
+	NCM: "09012100", CFOP: "5102",
+})
+var exists *stackin.ItemAlreadyExistsError
+if errors.As(err, &exists) {
+	coffee, err = items.Get(exists.ItemID) // the code belongs to another item
+}
+id := coffee["id"].(string)
+
+notes, empty := "fresh", ""
+items.Update(id, stackin.ItemChanges{Notes: &notes, Unit: &empty}) // "" clears
+items.Deactivate(id)                                               // kept, hidden from List
+items.Reactivate(id)
+
+stackin.NewInvoice(stackin.WithAPIKey("...")).Issue(stackin.IssueRequest{
+	DocumentType: stackin.NFE,
+	ClientID:     clientID,
+	Items:        []br.Product{{ItemID: id, Quantity: 2}}, // description, price, unit and fiscal codes from it
+})
+```
+
+- `List` filters by `Kind`, `Search` (part of the description, code or external reference; digits also match the NCM and GTIN), `Source` (`manual`, `import`, `nuvemshop`, `invoice`) and `IsActive` (nil lists the active items, as the API does), and pages with `Limit`/`Offset`. `SortBy` takes `description`, `code`, `unit_price`, `last_used_at`, `created_at` or `uses_count`.
+- `Upsert` is the public `POST /items` (`ItemFields.UnitPrice *float64` and `ISSRetained *bool` are pointers, so a price of `0` and `iss_retained: false` can be sent while nil is left out; the price goes out as a decimal string, and `UnitPriceText: "18.9000000001"` (up to 10 places, checked) keeps every digit a float would round. `ItemChanges` has the same `UnitPriceText *string`, `""` clearing the price): it updates the company's item with the same `ExternalReference` (or the same `Code` when none is sent) with the fields sent, and keeps its source and active flag; otherwise it creates one. Sending the same fields twice never makes two items. `Source` is used only when it creates. `Create` is the same call without the `created` flag (kept for parity with `Clients`).
+- `Update` sends only the fields set in `ItemChanges`: a nil pointer is left alone and a text pointing at `""` clears the field. `ISSRetained *bool` tells `false` from unset. The API checks the item as a whole, so turning a product into a service while it still has an `NCM` is refused (422).
+- `Deactivate` is `DELETE /items/{id}` (204, no body). A deactivated item still holds its code and is refused on `Issue` until `Reactivate`.
+- On `Issue`, a line with `ItemID` may leave `Description` empty: it is left out of the request and the catalog fills it, with `Unit`, `Barcode`, `NCM`, `CFOP`, `CEST`, `Tax`, `ServiceCode`, `TaxRetained` and the price (when neither `Amount` nor `UnitPrice` is set). A field set on the line wins. With `ItemID`, the SDK does not default `Unit` to `UN`, sends `tax_retained` only when `TaxRetained` is set (it is a `*bool`, so `ptr(false)` turns off a retention the item has) and does not require `NCM`/`CFOP` locally on an NF-e: the API checks the filled line. An item whose tax situation needs an ICMS base and rate is refused (`*ItemTaxRequiredError`) unless the line sends its own `Tax`.
+- Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `WithCompany` and `ForCompany` work here as on `Invoice`. Responses are plain maps, as on `Clients`.
+
 ## Several companies on one credential
 
 An API key is one company and needs nothing here: with no company set, requests are exactly what they were before. A credential authorized for several companies (an OAuth connection) has to say which one each call acts on, by the company id or its CNPJ (punctuation is ignored). It goes out as the `X-Stackin-Company` header on every request, lookups included.
@@ -610,6 +652,9 @@ Three things worth knowing before you loop:
 - `*stackin.RateLimitedError` — any 429. `RetryAfter` is the `Retry-After` header in seconds (derived from `RetryAt` when the header is missing); `Code` and `RetryAt` are set when the body carries them (`DISTRIBUTION_COOLDOWN` on `SyncReceived`). It wraps an `*APIError`.
 - `*stackin.ClientInactiveError` — 422 `CLIENT_INACTIVE`: the saved client `ClientID` is deactivated; reactivate it first. It wraps an `*APIError`.
 - `*stackin.ClientNotFoundError` — 404 `CLIENT_NOT_FOUND`: no saved client of this company has that id. It wraps an `*APIError`.
+- `*stackin.ItemAlreadyExistsError` — 409 `ITEM_EXISTS`: `Items.Create`, `Upsert` or `Update` with a code (or external reference) the company already has on another item, active or not. `ItemID` names it and `Field` says which. It wraps an `*APIError`.
+- `*stackin.ItemNotFoundError` — 404 `ITEM_NOT_FOUND`: no item of this company has that id. It wraps an `*APIError`.
+- `*stackin.ItemInactiveError`, `*stackin.ItemKindMismatchError`, `*stackin.ItemTaxRequiredError`, `*stackin.ItemTaxRegimeMismatchError` — the 422 answers of `Issue` for a line with `ItemID`: the item is deactivated (`ITEM_INACTIVE`), is a service on an NF-e or a product on an NFS-e (`ITEM_KIND_MISMATCH`), has a tax situation that needs the line's own `Tax` (`ITEM_TAX_REQUIRED`), or has a CST/CSOSN that does not fit the company's tax regime (a CSOSN is for Simples Nacional, a CST for the rest) or an export CFOP (`ITEM_TAX_REGIME_MISMATCH`). `ItemID` names the item and, on the last three, `Index` the line. Each wraps an `*APIError`.
 - `*stackin.ConnectionFailedError` — the API didn't respond (network/DNS/timeout).
 - `*stackin.InvoiceError` — `Issue()`'s `Items` is empty, missing `NCM`/`CFOP` on an item for NFE, a missing/incomplete `RecipientAddress` on NFE, or any other check listed under [Checked before the request goes out](#checked-before-the-request-goes-out). Also `Stats()` with `days` outside 1–365, `Classify()` with a `Description` outside 3–500 characters, a `DocumentType` other than NFE/NFSE or a `RecipientState` that is not two letters, `FiscalReference.Cities()` with a `name` outside 2–100 characters or a `State` that is not two letters, `Webhooks.Create()` with a URL that is not `https://`, a secret outside 16–255 characters or an event name not in `WebhookEvents`, and an invoice or endpoint id that is empty, `.` or `..` (ids are escaped as one path segment).
 
