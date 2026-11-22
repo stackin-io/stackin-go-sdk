@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.21.0 — 2026-11-22
+
+### Features
+- **items:** ITEM_TAX_REGIME_MISMATCH error (stackin-io/stackin-api#642)
+- **items:** items catalog resource and item_id on issue (stackin-io/stackin-api#642)
+
+### Bug Fixes
+- **items:** TaxRetained is a *bool, the unit price goes out as a decimal string (stackin-io/stackin-api#642)
+- **items:** UnitPrice and ISSRetained are pointers so 0 and false can be sent (stackin-io/stackin-api#642)
+
+### Chores
+- **gitignore:** block certificate, key and .env files (stackin-io/devops#47)
+
 ## v0.20.0 — 2026-11-21
 
 ### Features
