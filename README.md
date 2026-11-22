@@ -544,9 +544,11 @@ items := stackin.NewItems(stackin.WithAPIKey("..."))
 page, err := items.List(stackin.ItemQuery{Kind: "product", Search: "cafe", Limit: 20}) // active ones, by description
 
 // Upsert by ExternalReference (or Code): created is true for a 201, false for a 200.
+// UnitPrice and ISSRetained are pointers: nil is not sent, &zero / &no are.
+price := 18.9
 coffee, created, err := items.Upsert(stackin.ItemFields{
 	Kind: "product", Description: "Cafe torrado 500g", Code: "CAF-500",
-	UnitPrice: 18.9, Unit: "UN", ExternalReference: "ns-variant-1", Source: "nuvemshop",
+	UnitPrice: &price, Unit: "UN", ExternalReference: "ns-variant-1", Source: "nuvemshop",
 	NCM: "09012100", CFOP: "5102",
 })
 var exists *stackin.ItemAlreadyExistsError
@@ -568,7 +570,7 @@ stackin.NewInvoice(stackin.WithAPIKey("...")).Issue(stackin.IssueRequest{
 ```
 
 - `List` filters by `Kind`, `Search` (part of the description, code or external reference; digits also match the NCM and GTIN), `Source` (`manual`, `import`, `nuvemshop`, `invoice`) and `IsActive` (nil lists the active items, as the API does), and pages with `Limit`/`Offset`. `SortBy` takes `description`, `code`, `unit_price`, `last_used_at`, `created_at` or `uses_count`.
-- `Upsert` is the public `POST /items`: it updates the company's item with the same `ExternalReference` (or the same `Code` when none is sent) with the fields sent, and keeps its source and active flag; otherwise it creates one. Sending the same fields twice never makes two items. `Source` is used only when it creates. `Create` is the same call without the `created` flag (kept for parity with `Clients`).
+- `Upsert` is the public `POST /items` (`ItemFields.UnitPrice *float64` and `ISSRetained *bool` are pointers, so a price of `0` and `iss_retained: false` can be sent while nil is left out): it updates the company's item with the same `ExternalReference` (or the same `Code` when none is sent) with the fields sent, and keeps its source and active flag; otherwise it creates one. Sending the same fields twice never makes two items. `Source` is used only when it creates. `Create` is the same call without the `created` flag (kept for parity with `Clients`).
 - `Update` sends only the fields set in `ItemChanges`: a nil pointer is left alone and a text pointing at `""` clears the field. `ISSRetained *bool` tells `false` from unset. The API checks the item as a whole, so turning a product into a service while it still has an `NCM` is refused (422).
 - `Deactivate` is `DELETE /items/{id}` (204, no body). A deactivated item still holds its code and is refused on `Issue` until `Reactivate`.
 - On `Issue`, a line with `ItemID` may leave `Description` empty: it is left out of the request and the catalog fills it, with `Unit`, `Barcode`, `NCM`, `CFOP`, `CEST`, `Tax`, `ServiceCode`, `TaxRetained` and the price (when neither `Amount` nor `UnitPrice` is set). A field set on the line wins. With `ItemID`, the SDK does not default `Unit` to `UN`, sends `tax_retained` only when true and does not require `NCM`/`CFOP` locally on an NF-e: the API checks the filled line. An item whose tax situation needs an ICMS base and rate is refused (`*ItemTaxRequiredError`) unless the line sends its own `Tax`.

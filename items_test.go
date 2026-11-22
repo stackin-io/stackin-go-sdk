@@ -86,9 +86,10 @@ func TestItemsGetEscapesTheID(t *testing.T) {
 func TestItemsUpsertReportsCreatedOn201(t *testing.T) {
 	items, seen := newItems(t, http.StatusCreated, map[string]any{"id": itemID})
 
+	price, no := 18.9, false
 	item, created, err := items.Upsert(ItemFields{
 		Kind: "product", Description: "Cafe", ExternalReference: "ns-1",
-		Source: "nuvemshop", UnitPrice: 18.9, ISSRetained: false,
+		Source: "nuvemshop", UnitPrice: &price, ISSRetained: &no,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +103,7 @@ func TestItemsUpsertReportsCreatedOn201(t *testing.T) {
 	}
 	want := map[string]any{
 		"kind": "product", "description": "Cafe", "external_reference": "ns-1",
-		"source": "nuvemshop", "unit_price": 18.9,
+		"source": "nuvemshop", "unit_price": 18.9, "iss_retained": false,
 	}
 	if !reflect.DeepEqual(got.Body, want) {
 		t.Errorf("body %v", got.Body)
@@ -124,7 +125,8 @@ func TestItemsUpsertReportsUpdatedOn200(t *testing.T) {
 func TestItemsCreateReturnsTheItem(t *testing.T) {
 	items, _ := newItems(t, http.StatusCreated, map[string]any{"id": itemID})
 
-	item, err := items.Create(ItemFields{Kind: "service", Description: "Consultoria", ServiceCode: "1.07", ISSRetained: true})
+	yes := true
+	item, err := items.Create(ItemFields{Kind: "service", Description: "Consultoria", ServiceCode: "1.07", ISSRetained: &yes})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,5 +391,33 @@ func TestIssueLineWithoutItemIDSendsTheSameBody(t *testing.T) {
 	}
 	if unit := line["product"].(map[string]any)["unit"]; unit != "UN" {
 		t.Errorf("unit %v", unit)
+	}
+}
+
+func TestItemFieldsSendZeroAndFalseButNotUnset(t *testing.T) {
+	zero, no := 0.0, false
+	items, seen := newItems(t, http.StatusOK, map[string]any{"id": itemID})
+
+	if _, _, err := items.Upsert(ItemFields{
+		Kind: "service", Description: "Consultoria", UnitPrice: &zero, ISSRetained: &no,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sent := (*seen)[0].Body
+	if v, ok := sent["unit_price"]; !ok || v != 0.0 {
+		t.Errorf("unit_price 0 not sent: %v", sent)
+	}
+	if v, ok := sent["iss_retained"]; !ok || v != false {
+		t.Errorf("iss_retained false not sent: %v", sent)
+	}
+
+	if _, _, err := items.Upsert(ItemFields{Kind: "service", Description: "Consultoria"}); err != nil {
+		t.Fatal(err)
+	}
+	sent = (*seen)[1].Body
+	for _, key := range []string{"unit_price", "iss_retained"} {
+		if _, ok := sent[key]; ok {
+			t.Errorf("%s sent although unset: %v", key, sent)
+		}
 	}
 }

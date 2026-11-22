@@ -56,16 +56,17 @@ type ItemQuery struct {
 // ItemFields is an item as Create and Upsert take it. Kind and
 // Description are required. The NCM, CFOP, TaxSituation, Origin, CEST and
 // GTIN fields belong to a product and ServiceCode and ISSRetained to a
-// service; the other kind's is a 422. Empty fields are left out of the
-// request.
+// service; the other kind's is a 422. Empty text fields and nil pointers
+// are left out of the request; UnitPrice and ISSRetained are pointers so a
+// price of 0 and ISSRetained false (turning retention off) can be sent.
 type ItemFields struct {
-	Kind              string  `json:"kind"`
-	Description       string  `json:"description"`
-	Code              string  `json:"code,omitempty"`
-	UnitPrice         float64 `json:"unit_price,omitempty"`
-	Unit              string  `json:"unit,omitempty"`
-	ExternalReference string  `json:"external_reference,omitempty"`
-	Notes             string  `json:"notes,omitempty"`
+	Kind              string   `json:"kind"`
+	Description       string   `json:"description"`
+	Code              string   `json:"code,omitempty"`
+	UnitPrice         *float64 `json:"unit_price,omitempty"`
+	Unit              string   `json:"unit,omitempty"`
+	ExternalReference string   `json:"external_reference,omitempty"`
+	Notes             string   `json:"notes,omitempty"`
 	// Source is how the item came to be (manual, import, nuvemshop or
 	// invoice). Upsert only, and only when it creates; the API defaults it
 	// to manual.
@@ -77,7 +78,7 @@ type ItemFields struct {
 	CEST         string `json:"cest,omitempty"`
 	GTIN         string `json:"gtin,omitempty"`
 	ServiceCode  string `json:"service_code,omitempty"`
-	ISSRetained  bool   `json:"iss_retained,omitempty"`
+	ISSRetained  *bool  `json:"iss_retained,omitempty"`
 }
 
 // ItemChanges is what Update changes. A nil field is not sent; a text
