@@ -327,9 +327,9 @@ func TestIbsCbsNestsUnderBr(t *testing.T) {
 		IbsCbs: &IbsCbs{
 			CST:            "000",
 			Classification: "000001",
-			RateState:      0.1,
-			RateCity:       0.0,
-			RateFederal:    0.9,
+			RateState:      ptrTest(0.1),
+			RateCity:       ptrTest(0.0),
+			RateFederal:    ptrTest(0.9),
 		},
 	}
 
@@ -344,6 +344,12 @@ func TestIbsCbsNestsUnderBr(t *testing.T) {
 	}
 	if group["cst"] != "000" || group["classification"] != "000001" {
 		t.Errorf("got %v", group)
+	}
+	if group["rate_state"] != 0.1 || group["rate_city"] != 0.0 || group["rate_federal"] != 0.9 {
+		t.Errorf("an NF-e group keeps its rates, a zero one included: %v", group)
+	}
+	if _, present := group["operation_indicator"]; present {
+		t.Errorf("operation_indicator should be absent when not given, got %v", group)
 	}
 	if _, present := group["base"]; present {
 		t.Errorf("base should be absent when not given, got %v", group["base"])
@@ -361,8 +367,8 @@ func TestIbsCbsCarriesTheRateReductions(t *testing.T) {
 		IbsCbs: &IbsCbs{
 			CST:            "200",
 			Classification: "200009",
-			RateState:      0.1,
-			RateFederal:    0.9,
+			RateState:      ptrTest(0.1),
+			RateFederal:    ptrTest(0.9),
 			ReductionIbs:   ptrTest(60.0),
 			ReductionCbs:   ptrTest(60.0),
 		},
@@ -471,5 +477,24 @@ func TestProductToDictOmitsFuelWhenUnset(t *testing.T) {
 	data := Product{Description: "Diesel", Amount: 10, NCM: &ncm}.ToDict()
 	if _, present := data["product"].(map[string]any)["br"].(map[string]any)["fuel"]; present {
 		t.Error("fuel sent, want it left out when nil")
+	}
+}
+
+func TestIbsCbsNfseShapeCarriesNoRates(t *testing.T) {
+	product := Product{
+		Description: "Consultoria",
+		Amount:      100,
+		IbsCbs: &IbsCbs{
+			CST:                "000",
+			Classification:     "000001",
+			OperationIndicator: ptrTest("100301"),
+		},
+	}
+
+	br := product.ToDict()["product"].(map[string]any)["br"].(map[string]any)
+	group := br["ibs_cbs"].(map[string]any)
+	want := map[string]any{"cst": "000", "classification": "000001", "operation_indicator": "100301"}
+	if !reflect.DeepEqual(group, want) {
+		t.Errorf("got %v, want %v", group, want)
 	}
 }
