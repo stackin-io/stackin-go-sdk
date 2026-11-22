@@ -508,6 +508,7 @@ stackin.NewInvoice(stackin.WithAPIKey("...")).Issue(stackin.IssueRequest{
 - `Update` sends only the fields set in `ClientChanges`: a nil pointer is left alone, one pointing at `""` clears the field, `Address` replaces the whole address and `ClearAddress` removes it. The API checks the client as a whole, so clearing a Brazilian client's tax id is refused like a create without one.
 - On `Issue`, the client fills whichever of `ClientName`, `TaxID`, `ForeignID` and `RecipientAddress` are empty; the ones set win, and the empty ones are left out of the request. With `ClientID` the address checks apply only to a `RecipientAddress` that is set: the API checks the merged request. A deactivated client is refused there with a `*stackin.ClientInactiveError` (422) until it is reactivated.
 - `UpdateClient: true` rewrites an existing client with that request's recipient data. Left false, the issuance only counts one more use of it.
+- `ClientEmail` and `ClientPhone` (8 to 15 digits, optional leading `+`) are saved on the client created after a successful issuance, or on an existing one only with `UpdateClient: true`, and only the ones sent. They are not written into the fiscal document, and a reissue does not touch the client.
 - Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `WithCompany` and `ForCompany` work here as on `Invoice`.
 
 ## Webhooks
