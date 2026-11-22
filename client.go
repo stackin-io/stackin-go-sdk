@@ -196,14 +196,22 @@ type IssueRequest struct {
 
 	// ClientEmail is the recipient's e-mail, saved on the Stackin client
 	// created after a successful issuance, or on an existing one only with
-	// UpdateClient. It is not written into the fiscal document, and a
-	// reissue does not touch the client. Omitted when empty.
+	// UpdateClient. It is also kept on the invoice and sent again on a
+	// reissue (which does not touch the client), and written into the
+	// fiscal document: NF-e dest/email (up to 60 characters), NFS-e
+	// toma/email (up to 80). A value the layout cannot carry (too long,
+	// characters beyond Latin-1) is left out of the document and the
+	// issuance goes on. Omitted when empty.
 	ClientEmail string
 
 	// ClientPhone is the recipient's phone, 8 to 15 digits with an optional
 	// leading + (the API drops spaces, dots, dashes and parentheses). Saved
-	// on the client like ClientEmail, not written into the fiscal document.
-	// Omitted when empty.
+	// on the client like ClientEmail, and written into the fiscal document:
+	// NF-e dest/enderDest/fone (digits only, up to 14, only with a
+	// RecipientAddress), NFS-e toma/fone (up to 20 digits). Digits only,
+	// area code first; a +55 is dropped unless the recipient is abroad. A
+	// value the layout cannot carry is left out of the document. Omitted
+	// when empty.
 	ClientPhone string
 }
 
