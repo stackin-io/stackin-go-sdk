@@ -12,9 +12,14 @@ type IbsCbs struct {
 	CST            string
 	Classification string
 	Base           *float64
-	RateState      float64
-	RateCity       float64
-	RateFederal    float64
+	// RateState (pIBSUF), RateCity (pIBSMun) and RateFederal (pCBS) are in
+	// percent and sent only when set, so 0 is a rate a pointer can say. An
+	// NF-e group carries all three; an NFS-e group carries none.
+	RateState   *float64
+	RateCity    *float64
+	RateFederal *float64
+	// OperationIndicator is the cIndOp, 6 digits. Sent only when set.
+	OperationIndicator *string
 	// ReductionIbs is the IBS pRedAliq (state and municipality), in percent:
 	// the cClassTrib's pRedIBS. Sent only when set.
 	ReductionIbs *float64
@@ -27,10 +32,11 @@ func (g IbsCbs) toMap() map[string]any {
 	data := map[string]any{
 		"cst":            g.CST,
 		"classification": g.Classification,
-		"rate_state":     g.RateState,
-		"rate_city":      g.RateCity,
-		"rate_federal":   g.RateFederal,
 	}
+	setIfNotNil(data, "rate_state", g.RateState)
+	setIfNotNil(data, "rate_city", g.RateCity)
+	setIfNotNil(data, "rate_federal", g.RateFederal)
+	setIfNotNil(data, "operation_indicator", g.OperationIndicator)
 	setIfNotNil(data, "base", g.Base)
 	setIfNotNil(data, "reduction_ibs", g.ReductionIbs)
 	setIfNotNil(data, "reduction_cbs", g.ReductionCbs)

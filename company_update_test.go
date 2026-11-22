@@ -104,6 +104,7 @@ func TestCompanyUpdateRefusesWhatTheAPIWould(t *testing.T) {
 		{CompanyUpdate{FiscalFields: &FiscalFields{TaxRegime: "5"}}, "tax_regime"},
 		{CompanyUpdate{FiscalFields: &FiscalFields{SimplesNacional: "4"}}, "simples_nacional"},
 		{CompanyUpdate{FiscalFields: &FiscalFields{SimplesApuracao: "12"}}, "simples_apuracao"},
+		{CompanyUpdate{FiscalFields: &FiscalFields{SimplesApuracaoIbsCbs: "2"}}, "simples_apuracao_ibs_cbs"},
 	}
 	for _, c := range cases {
 		_, err := company.Update(c.update)
@@ -167,5 +168,20 @@ func TestCompanyUpdateWithoutTheScopeIsInsufficientPermission(t *testing.T) {
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusForbidden {
 		t.Errorf("err = %v, want an *APIError 403 inside", err)
+	}
+}
+
+func TestCompanyUpdateSendsSimplesApuracaoIbsCbs(t *testing.T) {
+	url, got := routeServer(t, http.StatusOK, `{}`)
+
+	_, err := NewCompany(WithBaseURL(url), WithAPIKey("k")).Update(CompanyUpdate{
+		FiscalFields: &FiscalFields{SimplesApuracaoIbsCbs: "3"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"fiscal_fields": map[string]any{"simples_apuracao_ibs_cbs": "3"}}
+	if !reflect.DeepEqual(got.body, want) {
+		t.Errorf("body = %v, want %v", got.body, want)
 	}
 }

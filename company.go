@@ -64,6 +64,9 @@ type FiscalFields struct {
 	SimplesNacional string `json:"simples_nacional,omitempty"`
 	// SimplesApuracao is the NFS-e regApTribSN for ME/EPP, 1 to 3.
 	SimplesApuracao string `json:"simples_apuracao,omitempty"`
+	// SimplesApuracaoIbsCbs is the apuração of the IBS/CBS for an ME/EPP,
+	// 1 or 3; 3 is what the NFS-e IBS/CBS group needs.
+	SimplesApuracaoIbsCbs string `json:"simples_apuracao_ibs_cbs,omitempty"`
 	// StateRegistration is the inscrição estadual (IE), or ISENTO.
 	StateRegistration string `json:"state_registration,omitempty"`
 	// ServiceCode is the default cTribNac, e.g. 1.07 or 01.07.00.
@@ -128,6 +131,7 @@ func (f *FiscalFields) body() (map[string]string, error) {
 	checks := []struct {
 		key, value, allowed string
 	}{
+		{"simples_apuracao_ibs_cbs", f.SimplesApuracaoIbsCbs, "13"},
 		{"tax_regime", f.TaxRegime, "1234"},
 		{"simples_nacional", f.SimplesNacional, "123"},
 		{"simples_apuracao", f.SimplesApuracao, "123"},
