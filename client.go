@@ -245,7 +245,7 @@ func missingAddressFields(address *Address, abroad bool) []string {
 func validateRetainedISSAddress(req IssueRequest) error {
 	retained := false
 	for _, item := range req.Items {
-		if item.TaxRetained {
+		if item.TaxRetained != nil && *item.TaxRetained {
 			retained = true
 			break
 		}

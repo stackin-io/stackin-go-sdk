@@ -4,8 +4,31 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
+
+	"github.com/stackin-io/stackin-go-sdk/br"
 )
+
+// priceText matches the plain decimal a catalog price may be sent as: up to
+// 10 places, the vUnCom precision.
+var priceText = regexp.MustCompile(`^\d+(\.\d{1,10})?$`)
+
+// priceWire gives the decimal string a unit price goes out as. The text
+// wins over the float, and is checked; the float is written as a plain
+// decimal, never in exponent form. Both unset gives "" (not sent).
+func priceWire(number *float64, text string) (string, error) {
+	if text != "" {
+		if !priceText.MatchString(text) {
+			return "", &InvoiceError{Message: "unit price must be a decimal with at most 10 places, such as 18.90"}
+		}
+		return text, nil
+	}
+	if number != nil {
+		return br.DecimalString(*number), nil
+	}
+	return "", nil
+}
 
 // Items reads and edits the company's catalog of products and services,
 // and Product.ItemID issues a line from one. The catalog is one table told
@@ -60,10 +83,14 @@ type ItemQuery struct {
 // are left out of the request; UnitPrice and ISSRetained are pointers so a
 // price of 0 and ISSRetained false (turning retention off) can be sent.
 type ItemFields struct {
-	Kind              string   `json:"kind"`
-	Description       string   `json:"description"`
-	Code              string   `json:"code,omitempty"`
-	UnitPrice         *float64 `json:"unit_price,omitempty"`
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	Code        string `json:"code,omitempty"`
+	// UnitPrice is a pointer so a price of 0 can be sent, and goes out as a
+	// decimal string. UnitPriceText (such as "18.9000000001", up to 10
+	// places) wins over it and keeps every digit a float64 would round.
+	UnitPrice         *float64 `json:"-"`
+	UnitPriceText     string   `json:"-"`
 	Unit              string   `json:"unit,omitempty"`
 	ExternalReference string   `json:"external_reference,omitempty"`
 	Notes             string   `json:"notes,omitempty"`
@@ -81,15 +108,33 @@ type ItemFields struct {
 	ISSRetained  *bool  `json:"iss_retained,omitempty"`
 }
 
+// MarshalJSON writes the unit price as a decimal string.
+func (f ItemFields) MarshalJSON() ([]byte, error) {
+	price, err := priceWire(f.UnitPrice, f.UnitPriceText)
+	if err != nil {
+		return nil, err
+	}
+	type plain ItemFields
+	out := struct {
+		plain
+		UnitPrice string `json:"unit_price,omitempty"`
+	}{plain: plain(f), UnitPrice: price}
+	return json.Marshal(out)
+}
+
 // ItemChanges is what Update changes. A nil field is not sent; a text
 // field pointing at "" is sent as null, which clears it. The API checks
 // the item as a whole, so changing Kind while a field of the old kind is
 // still set is a 422.
 type ItemChanges struct {
-	Kind              *string
-	Description       *string
-	Code              *string
+	Kind        *string
+	Description *string
+	Code        *string
+	// UnitPrice is sent as a decimal string. UnitPriceText (up to 10
+	// places) wins over it and keeps every digit; pointing it at "" clears
+	// the price.
 	UnitPrice         *float64
+	UnitPriceText     *string
 	Unit              *string
 	ExternalReference *string
 	Notes             *string
@@ -106,7 +151,7 @@ type ItemChanges struct {
 	IsActive *bool
 }
 
-func (changes ItemChanges) body() map[string]any {
+func (changes ItemChanges) body() (map[string]any, error) {
 	body := map[string]any{}
 	texts := []struct {
 		key   string
@@ -135,8 +180,17 @@ func (changes ItemChanges) body() map[string]any {
 			body[text.key] = *text.value
 		}
 	}
-	if changes.UnitPrice != nil {
-		body["unit_price"] = *changes.UnitPrice
+	switch {
+	case changes.UnitPriceText != nil && *changes.UnitPriceText == "":
+		body["unit_price"] = nil
+	case changes.UnitPriceText != nil:
+		price, err := priceWire(nil, *changes.UnitPriceText)
+		if err != nil {
+			return nil, err
+		}
+		body["unit_price"] = price
+	case changes.UnitPrice != nil:
+		body["unit_price"] = br.DecimalString(*changes.UnitPrice)
 	}
 	if changes.ISSRetained != nil {
 		body["iss_retained"] = *changes.ISSRetained
@@ -144,7 +198,7 @@ func (changes ItemChanges) body() map[string]any {
 	if changes.IsActive != nil {
 		body["is_active"] = *changes.IsActive
 	}
-	return body
+	return body, nil
 }
 
 // List returns a page of the company's items.
@@ -221,7 +275,11 @@ func (i *Items) Update(itemID string, changes ItemChanges) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
-	return i.request(http.MethodPatch, "/items/"+escaped, changes.body(), nil)
+	body, err := changes.body()
+	if err != nil {
+		return nil, err
+	}
+	return i.request(http.MethodPatch, "/items/"+escaped, body, nil)
 }
 
 // Deactivate deactivates an item. It is kept, still holds its code, is

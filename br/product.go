@@ -77,7 +77,7 @@ type Product struct {
 	// leaves out: Unit, Barcode, NCM, CFOP, CEST, Tax, ServiceCode,
 	// TaxRetained and, when neither Amount nor UnitPrice is set, the price.
 	// A field set here wins. Unit is then not defaulted to UN and
-	// TaxRetained is sent only when true, so the item's values are not
+	// TaxRetained is sent only when set (nil), so the item's values are not
 	// overridden by the SDK's own defaults.
 	ItemID string
 
@@ -113,8 +113,11 @@ type Product struct {
 
 	ServiceCode     *string  // LC 116/2003 item.subitem, nfse only
 	ServiceDiscount *float64 // unconditional discount, nfse only
-	TaxRetained     bool     // ISSQN retained by the tomador, nfse only
-	Observations    *string  // nfse only
+	// TaxRetained is a pointer so false can be sent on a line with an ItemID
+	// (turning off a retention the item has). nil is left to the item, or
+	// sent as false when there is no ItemID.
+	TaxRetained  *bool   // ISSQN retained by the tomador, nfse only
+	Observations *string // nfse only
 }
 
 func (p Product) ToDict() map[string]any {
@@ -182,8 +185,10 @@ func (p Product) ToDict() map[string]any {
 	if p.ItemID == "" || p.Description != "" {
 		result["description"] = p.Description
 	}
-	if p.ItemID == "" || p.TaxRetained {
-		result["tax_retained"] = p.TaxRetained
+	if p.TaxRetained != nil {
+		result["tax_retained"] = *p.TaxRetained
+	} else if p.ItemID == "" {
+		result["tax_retained"] = false
 	}
 	if p.Amount != 0 {
 		result["amount"] = decimalString(p.Amount)
@@ -197,8 +202,14 @@ func (p Product) ToDict() map[string]any {
 	return result
 }
 
-func decimalString(value float64) string {
+// DecimalString writes a price as the plain decimal the API takes, never in
+// exponent form. The catalog's unit price goes through it too.
+func DecimalString(value float64) string {
 	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+func decimalString(value float64) string {
+	return DecimalString(value)
 }
 
 func setIfNotNil[T any](m map[string]any, key string, v *T) {

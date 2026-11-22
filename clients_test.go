@@ -398,7 +398,7 @@ func clientNFEItem() br.Product {
 }
 
 func clientNFSEItem(retained bool) br.Product {
-	return br.Product{Description: "svc", Amount: 10, TaxRetained: retained}
+	return br.Product{Description: "svc", Amount: 10, TaxRetained: &retained}
 }
 
 func TestIssueWithClientIDAloneNamesTheRecipient(t *testing.T) {

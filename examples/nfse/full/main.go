@@ -23,7 +23,7 @@ func main() {
 		UnitPrice:       ptr(1200.00),
 		ServiceCode:     ptr("1.05"),
 		ServiceDiscount: ptr(100.00),
-		TaxRetained:     true,
+		TaxRetained:     ptr(true),
 		Observations:    ptr("Licenca anual, renovacao automatica."),
 	}
 

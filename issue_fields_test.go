@@ -287,7 +287,7 @@ func TestNFSeWithRetainedISSStillNeedsZipCodeForEX(t *testing.T) {
 		DocumentType:     NFSE,
 		ClientName:       "Acme",
 		TaxID:            "11222333000181",
-		Items:            []br.Product{{Description: "Consulting", Amount: 10, TaxRetained: true}},
+		Items:            []br.Product{{Description: "Consulting", Amount: 10, TaxRetained: ptr(true)}},
 		RecipientAddress: abroadAddress(),
 	}
 	expectRefusal(t, req, "ZipCode")

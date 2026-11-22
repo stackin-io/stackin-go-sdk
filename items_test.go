@@ -103,7 +103,7 @@ func TestItemsUpsertReportsCreatedOn201(t *testing.T) {
 	}
 	want := map[string]any{
 		"kind": "product", "description": "Cafe", "external_reference": "ns-1",
-		"source": "nuvemshop", "unit_price": 18.9, "iss_retained": false,
+		"source": "nuvemshop", "unit_price": "18.9", "iss_retained": false,
 	}
 	if !reflect.DeepEqual(got.Body, want) {
 		t.Errorf("body %v", got.Body)
@@ -150,7 +150,7 @@ func TestItemsUpdateSendsOnlyTheFieldsSetAndNullToClear(t *testing.T) {
 	if got.Method != http.MethodPatch || got.Path != "/api/v1/items/"+itemID {
 		t.Errorf("%s %s", got.Method, got.Path)
 	}
-	want := map[string]any{"description": "Novo", "notes": nil, "unit_price": 0.5, "iss_retained": false}
+	want := map[string]any{"description": "Novo", "notes": nil, "unit_price": "0.5", "iss_retained": false}
 	if !reflect.DeepEqual(got.Body, want) {
 		t.Errorf("body %v", got.Body)
 	}
@@ -344,7 +344,7 @@ func TestIssueLineWithItemIDSendsItAndOmitsTheDescription(t *testing.T) {
 func TestIssueLineWithItemIDSendsTheFieldsSetSoTheyWin(t *testing.T) {
 	line := sentLine(t, IssueRequest{
 		DocumentType: NFSE, ClientID: clientID,
-		Items: []br.Product{{ItemID: itemID, Description: "Mine", Unit: "KG", Amount: 5, TaxRetained: true}},
+		Items: []br.Product{{ItemID: itemID, Description: "Mine", Unit: "KG", Amount: 5, TaxRetained: ptr(true)}},
 	})
 
 	if line["description"] != "Mine" || line["amount"] != "5" || line["tax_retained"] != true {
@@ -404,7 +404,7 @@ func TestItemFieldsSendZeroAndFalseButNotUnset(t *testing.T) {
 		t.Fatal(err)
 	}
 	sent := (*seen)[0].Body
-	if v, ok := sent["unit_price"]; !ok || v != 0.0 {
+	if v, ok := sent["unit_price"]; !ok || v != "0" {
 		t.Errorf("unit_price 0 not sent: %v", sent)
 	}
 	if v, ok := sent["iss_retained"]; !ok || v != false {
@@ -419,5 +419,77 @@ func TestItemFieldsSendZeroAndFalseButNotUnset(t *testing.T) {
 		if _, ok := sent[key]; ok {
 			t.Errorf("%s sent although unset: %v", key, sent)
 		}
+	}
+}
+
+func TestItemFieldsSendAUnitPriceTextAsIs(t *testing.T) {
+	items, seen := newItems(t, http.StatusCreated, map[string]any{"id": itemID})
+
+	if _, _, err := items.Upsert(ItemFields{
+		Kind: "product", Description: "Cafe", UnitPriceText: "18.9000000001",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := (*seen)[0].Body["unit_price"]; got != "18.9000000001" {
+		t.Errorf("unit_price %v", got)
+	}
+}
+
+func TestItemFieldsRefuseABadUnitPriceText(t *testing.T) {
+	items, seen := newItems(t, http.StatusCreated, map[string]any{"id": itemID})
+
+	for _, bad := range []string{"1,5", "-1", "1e3", "0.12345678901", " 1"} {
+		_, _, err := items.Upsert(ItemFields{Kind: "product", Description: "x", UnitPriceText: bad})
+		if err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	if len(*seen) != 0 {
+		t.Errorf("%d requests went out", len(*seen))
+	}
+}
+
+func TestItemChangesSendAPriceTextAndClearIt(t *testing.T) {
+	items, seen := newItems(t, http.StatusOK, map[string]any{"id": itemID})
+	text := "1234.5678901234"
+	empty := ""
+
+	if _, err := items.Update(itemID, ItemChanges{UnitPriceText: &text}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := items.Update(itemID, ItemChanges{UnitPriceText: &empty}); err != nil {
+		t.Fatal(err)
+	}
+	bad := "1,5"
+	if _, err := items.Update(itemID, ItemChanges{UnitPriceText: &bad}); err == nil {
+		t.Error("bad text accepted")
+	}
+	if got := (*seen)[0].Body["unit_price"]; got != text {
+		t.Errorf("unit_price %v", got)
+	}
+	if v, ok := (*seen)[1].Body["unit_price"]; !ok || v != nil {
+		t.Errorf("unit_price not cleared: %v", (*seen)[1].Body)
+	}
+	if len(*seen) != 2 {
+		t.Errorf("%d requests", len(*seen))
+	}
+}
+
+func TestIssueLineWithItemIDSendsTaxRetainedFalseWhenSet(t *testing.T) {
+	no := false
+	line := sentLine(t, IssueRequest{
+		DocumentType: NFSE, ClientID: clientID,
+		Items: []br.Product{{ItemID: itemID, TaxRetained: &no}},
+	})
+	if v, ok := line["tax_retained"]; !ok || v != false {
+		t.Errorf("tax_retained false not sent: %v", line)
+	}
+
+	line = sentLine(t, IssueRequest{
+		DocumentType: NFSE, ClientID: clientID,
+		Items: []br.Product{{ItemID: itemID}},
+	})
+	if _, ok := line["tax_retained"]; ok {
+		t.Errorf("tax_retained sent although unset: %v", line)
 	}
 }
