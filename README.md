@@ -181,18 +181,38 @@ item := br.Product{
 }
 ```
 
-An item's IBS/CBS group (Reforma Tributária) is `br.IbsCbs`, sent under the item's `br.ibs_cbs` key: `CST`, `Classification` (cClassTrib), `RateState`, `RateCity` and `RateFederal`, plus `Base`, `ReductionIbs` and `ReductionCbs`, which are sent only when set. `ReductionIbs` is the IBS pRedAliq (state and municipality) and `ReductionCbs` the CBS pRedAliq, both in percent (0–100): the cClassTrib's `pRedIBS` and `pRedCBS` in the official classification table. The API asks for them on CST 011, 200 and 515 and refuses them on any other; the SDK leaves that rule to the API.
+An item's IBS/CBS group (Reforma Tributária) is `br.IbsCbs`, sent under the item's `br.ibs_cbs` key. Every field except `CST` and `Classification` (cClassTrib) is sent only when set.
+
+- **On an NF-e** send `RateState`, `RateCity` and `RateFederal` (percent, 0–100), plus `Base`, `ReductionIbs` and `ReductionCbs` when they apply. `ReductionIbs` is the IBS pRedAliq (state and municipality) and `ReductionCbs` the CBS pRedAliq, both in percent: the cClassTrib's `pRedIBS` and `pRedCBS` in the official classification table. The API asks for the reductions on CST 011, 200 and 515 and refuses them on any other.
+- **On an NFS-e** send only `CST`, `Classification` and `OperationIndicator` (cIndOp, 6 digits). The API mandates `OperationIndicator` on a production NFS-e and refuses the rates there. An ME/EPP also needs `SimplesApuracaoIbsCbs` 3 on the company (`Company.Update`, below) for the NFS-e group.
+
+Which fields each document type takes is the API's rule, not the SDK's: the SDK sends what is set and the API answers by name.
 
 ```go
 reduction := 60.0
-item := br.Product{
+state, city, federal := 0.1, 0.0, 0.9
+nfeItem := br.Product{
 	Description: "Medicamento", Amount: 100.00, NCM: &ncm, CFOP: &cfop,
 	IbsCbs: &br.IbsCbs{
 		CST: "200", Classification: "200009",
-		RateState: 0.1, RateFederal: 0.9,
+		RateState: &state, RateCity: &city, RateFederal: &federal,
 		ReductionIbs: &reduction, ReductionCbs: &reduction,
 	},
 }
+
+indicator := "100301"
+nfseItem := br.Product{
+	Description: "Consultoria", Amount: 100.00,
+	IbsCbs: &br.IbsCbs{CST: "000", Classification: "000001", OperationIndicator: &indicator},
+}
+```
+
+**Breaking since v0.23.0:** `RateState`, `RateCity` and `RateFederal` are `*float64`, like `ReductionIbs`, so a group can leave them out (an NFS-e) and still send a real `0` (an NF-e with `RateCity` 0). A `float64` field cannot say both. Existing code that assigned a value must take its address:
+
+```text
+Before:  IbsCbs{RateState: 0.1, RateCity: 0, RateFederal: 0.9}
+After:   state, city, federal := 0.1, 0.0, 0.9
+         IbsCbs{RateState: &state, RateCity: &city, RateFederal: &federal}
 ```
 
 `Contingency` — NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Left `false`, nothing is sent:
@@ -372,8 +392,8 @@ fmt.Println(result["ready"], result["missing"])
 Only what is set is sent. There is no complement, and the state changes only in
 the dashboard. `MunicipalityName` is derived from the code when left out. The
 municipality code (7 digits), the CEP (8 digits, mask stripped) and the
-`TaxRegime` (1–4), `SimplesNacional` and `SimplesApuracao` (1–3) codes are checked
-locally. `FiscalFields` are the company owner's alone: anyone else gets an
+`TaxRegime` (1–4), `SimplesNacional` and `SimplesApuracao` (1–3) and
+`SimplesApuracaoIbsCbs` (1 or 3) codes are checked locally. `FiscalFields` are the company owner's alone: anyone else gets an
 `*APIError` 403. An OAuth credential needs `company:write`
 (`*InsufficientPermissionError` without it). A 503 means the IBGE table could not
 be read: nothing was written, retry after `Retry-After`.
@@ -633,6 +653,23 @@ stackin.NewTaxpayer(stackin.WithAPIKey("...")).Get("00000000000191")
 ```go
 ref.Cities("santa rita", stackin.CityQuery{State: "SP"}) // [{country: BR, code: ..., name: ..., state: SP}]
 ```
+
+`CalculateIbsCbs(IbsCbsCalculationRequest)` simulates the IBS and CBS of 1 to 990 items (`POST /ibs-cbs/calculate`, scope `invoice:read`). It needs no company, issues nothing and stores nothing:
+
+```go
+amount, city := 100.0, 0.0
+calc, err := ref.CalculateIbsCbs(stackin.IbsCbsCalculationRequest{
+	DocumentType:  "nfe", // nfe (default), nfce or nfse: only picks the model the cClassTrib is checked for
+	OperationDate: "2026-03-10",
+	Items: []stackin.IbsCbsCalculationItem{
+		{CST: "000", Classification: "000001", Amount: &amount}, // Amount or Base is required
+	},
+	Rates: &stackin.IbsCbsRates{RateCity: &city}, // optional; an item's own rate wins
+})
+fmt.Println(calc.Total.Ibs, calc.Total.Cbs, calc.Items[0].RatesSource)
+```
+
+Only what is set is sent. Left out, the official 2026 rates apply to a 2026 date (CBS 0.9%, IBS UF 0.1%, IBS Mun 0%); for any other year the API refuses the call with `IBS_CBS_RATES_REQUIRED` (an `*APIError` 422). The item count, the `CST` (3 digits) and `Classification` (6 digits) patterns, `Amount`/`Base` greater than zero, rates and reductions between 0 and 100 and the `OperationDate` format are checked locally. The result is typed (`IbsCbsCalculation`, `IbsCbsCalculatedItem`, `IbsCbsIndicators`, `IbsCbsAppliedRates`, `IbsCbsAmounts`) and keeps every amount and rate as the decimal string the API sends. The amounts are the NF-e's: the simulation does not compute an NFS-e's, which the Sefin Nacional does.
 
 `metadata` comes back as the API sends it and differs per kind: `utrib` on an NCM, `ncm_code` on a CEST, `tax_type` on a CST, `nil` on an ISS service.
 
