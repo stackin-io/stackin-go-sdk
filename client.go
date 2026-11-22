@@ -193,6 +193,18 @@ type IssueRequest struct {
 	// recipient data after a successful issuance; a new recipient is
 	// saved as a client either way. Sent only when true.
 	UpdateClient bool
+
+	// ClientEmail is the recipient's e-mail, saved on the Stackin client
+	// created after a successful issuance, or on an existing one only with
+	// UpdateClient. It is not written into the fiscal document, and a
+	// reissue does not touch the client. Omitted when empty.
+	ClientEmail string
+
+	// ClientPhone is the recipient's phone, 8 to 15 digits with an optional
+	// leading + (the API drops spaces, dots, dashes and parentheses). Saved
+	// on the client like ClientEmail, not written into the fiscal document.
+	// Omitted when empty.
+	ClientPhone string
 }
 
 // RequestOption tunes a single call, as opposed to Option, which tunes the
@@ -474,6 +486,12 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	}
 	if req.UpdateClient {
 		payload["update_client"] = true
+	}
+	if req.ClientEmail != "" {
+		payload["client_email"] = req.ClientEmail
+	}
+	if req.ClientPhone != "" {
+		payload["client_phone"] = req.ClientPhone
 	}
 	if req.RecipientAddress != nil {
 		payload["recipient_address"] = req.RecipientAddress
