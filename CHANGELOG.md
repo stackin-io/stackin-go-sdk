@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.22.0 — 2026-11-22
+
+### Features
+- **invoice:** ClientEmail and ClientPhone on IssueRequest (#43)
+
 ## v0.21.0 — 2026-11-22
 
 ### Features
