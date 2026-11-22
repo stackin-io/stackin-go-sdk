@@ -371,3 +371,30 @@ func TestIssueRefusesFuelBesideExtraGroupsComb(t *testing.T) {
 	req.Items[0].ExtraGroups = map[string]any{"comb": map[string]any{"cProdANP": "820101034"}}
 	expectRefusal(t, req, "items[0].fuel can't be sent together with extra_groups.comb")
 }
+
+func TestIssueSendsClientContact(t *testing.T) {
+	req := nfeRequest(nfeItem())
+	req.ClientEmail = "a@b.com"
+	req.ClientPhone = "+5511999998888"
+	raw, _, err := captureIssue(t, req)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	body := sentFields(t, raw)
+	if body["client_email"] != "a@b.com" || body["client_phone"] != "+5511999998888" {
+		t.Errorf("contact not sent: %s", raw)
+	}
+}
+
+func TestIssueOmitsClientContactWhenEmpty(t *testing.T) {
+	raw, _, err := captureIssue(t, nfeRequest(nfeItem()))
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	body := sentFields(t, raw)
+	for _, k := range []string{"client_email", "client_phone"} {
+		if _, ok := body[k]; ok {
+			t.Errorf("%s sent when empty: %s", k, raw)
+		}
+	}
+}
