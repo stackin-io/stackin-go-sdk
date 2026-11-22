@@ -72,6 +72,15 @@ func (f Fuel) toMap() map[string]any {
 }
 
 type Product struct {
+	// ItemID names a catalog item of the company (see stackin.Items). With
+	// it, Description is optional and the item fills whatever the line
+	// leaves out: Unit, Barcode, NCM, CFOP, CEST, Tax, ServiceCode,
+	// TaxRetained and, when neither Amount nor UnitPrice is set, the price.
+	// A field set here wins. Unit is then not defaulted to UN and
+	// TaxRetained is sent only when true, so the item's values are not
+	// overridden by the SDK's own defaults.
+	ItemID string
+
 	Description       string
 	Amount            float64
 	UnitPrice         *float64
@@ -110,7 +119,7 @@ type Product struct {
 
 func (p Product) ToDict() map[string]any {
 	unit := p.Unit
-	if unit == "" {
+	if unit == "" && p.ItemID == "" {
 		unit = "UN"
 	}
 	quantity := p.Quantity
@@ -119,9 +128,11 @@ func (p Product) ToDict() map[string]any {
 	}
 
 	data := map[string]any{
-		"unit":               unit,
 		"quantity":           quantity,
 		"used_movable_asset": p.UsedMovableAsset,
+	}
+	if unit != "" {
+		data["unit"] = unit
 	}
 	setIfNotNil(data, "barcode", p.Barcode)
 	setIfNotNil(data, "freight", p.Freight)
@@ -164,10 +175,15 @@ func (p Product) ToDict() map[string]any {
 		data["br"] = br
 	}
 
-	result := map[string]any{
-		"description":  p.Description,
-		"product":      data,
-		"tax_retained": p.TaxRetained,
+	result := map[string]any{"product": data}
+	if p.ItemID != "" {
+		result["item_id"] = p.ItemID
+	}
+	if p.ItemID == "" || p.Description != "" {
+		result["description"] = p.Description
+	}
+	if p.ItemID == "" || p.TaxRetained {
+		result["tax_retained"] = p.TaxRetained
 	}
 	if p.Amount != 0 {
 		result["amount"] = decimalString(p.Amount)

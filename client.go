@@ -31,7 +31,7 @@ var environmentURLs = map[Environment]string{
 	Production: DefaultBaseURL,
 }
 
-// transport is where an API key becomes an HTTP call. Invoice, Clients,
+// transport is where an API key becomes an HTTP call. Invoice, Clients, Items,
 // FiscalReference and Taxpayer all embed it, so one option type
 // configures every entry point and one code path issues every request.
 type transport struct {
@@ -420,11 +420,13 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 
 	if req.DocumentType == NFE {
 		for i, item := range req.Items {
-			if item.NCM == nil || *item.NCM == "" {
-				return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].ncm is required for NFE", i)}
-			}
-			if item.CFOP == nil || *item.CFOP == "" {
-				return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].cfop is required for NFE", i)}
+			if item.ItemID == "" {
+				if item.NCM == nil || *item.NCM == "" {
+					return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].ncm is required for NFE", i)}
+				}
+				if item.CFOP == nil || *item.CFOP == "" {
+					return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].cfop is required for NFE", i)}
+				}
 			}
 			if len([]rune(item.Description)) > nfeDescriptionLimit {
 				return nil, &InvoiceError{Message: fmt.Sprintf(
@@ -782,6 +784,14 @@ func (inv *transport) request(method, path string, payload any, params url.Value
 }
 
 func (inv *transport) send(method, path string, payload any, params url.Values, opts ...RequestOption) ([]byte, error) {
+	raw, _, err := inv.sendStatus(method, path, payload, params, opts...)
+	return raw, err
+}
+
+// sendStatus is send that also returns the HTTP status of a 2xx answer,
+// for the one route (the items upsert) whose 200 and 201 mean different
+// things.
+func (inv *transport) sendStatus(method, path string, payload any, params url.Values, opts ...RequestOption) ([]byte, int, error) {
 	var cfg requestConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -796,14 +806,14 @@ func (inv *transport) send(method, path string, payload any, params url.Values, 
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		body = bytes.NewReader(raw)
 	}
 
 	httpReq, err := http.NewRequest(method, reqURL, body)
 	if err != nil {
-		return nil, &ConnectionFailedError{Message: err.Error()}
+		return nil, 0, &ConnectionFailedError{Message: err.Error()}
 	}
 	if payload != nil {
 		httpReq.Header.Set("Content-Type", "application/json")
@@ -820,13 +830,13 @@ func (inv *transport) send(method, path string, payload any, params url.Values, 
 
 	resp, err := inv.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, &ConnectionFailedError{Message: err.Error()}
+		return nil, 0, &ConnectionFailedError{Message: err.Error()}
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, &ConnectionFailedError{Message: err.Error()}
+		return nil, 0, &ConnectionFailedError{Message: err.Error()}
 	}
 
 	var parsed map[string]any
@@ -845,8 +855,8 @@ func (inv *transport) send(method, path string, payload any, params url.Values, 
 				structured = b
 			}
 		}
-		return nil, newAPIError(resp.StatusCode, detail, structured, raw, resp.Header)
+		return nil, resp.StatusCode, newAPIError(resp.StatusCode, detail, structured, raw, resp.Header)
 	}
 
-	return raw, nil
+	return raw, resp.StatusCode, nil
 }

@@ -135,6 +135,76 @@ func (e *ClientNotFoundError) Unwrap() error {
 	return &e.APIError
 }
 
+// ItemAlreadyExistsError is the API's 409 ITEM_EXISTS: the company already
+// has an item with this code or external reference (a deactivated item
+// still holds its code). ItemID names it and Field is "code" or
+// "external_reference". errors.As still finds the *APIError inside.
+type ItemAlreadyExistsError struct {
+	APIError
+	Message string
+	ItemID  string
+	Field   string
+}
+
+func (e *ItemAlreadyExistsError) Unwrap() error {
+	return &e.APIError
+}
+
+// ItemNotFoundError is the API's 404 ITEM_NOT_FOUND: no item of this
+// company has that id, also the answer for another company's item.
+// errors.As still finds the *APIError inside.
+type ItemNotFoundError struct {
+	APIError
+	Message string
+	ItemID  string
+}
+
+func (e *ItemNotFoundError) Unwrap() error {
+	return &e.APIError
+}
+
+// ItemInactiveError is the API's 422 ITEM_INACTIVE: the catalog item named
+// by ItemID is deactivated. Reactivate it, or issue without it. errors.As
+// still finds the *APIError inside.
+type ItemInactiveError struct {
+	APIError
+	Message string
+	ItemID  string
+}
+
+func (e *ItemInactiveError) Unwrap() error {
+	return &e.APIError
+}
+
+// ItemKindMismatchError is the API's 422 ITEM_KIND_MISMATCH: a service
+// item on an NF-e or a product item on an NFS-e. Index is the line.
+// errors.As still finds the *APIError inside.
+type ItemKindMismatchError struct {
+	APIError
+	Message string
+	ItemID  string
+	Index   int
+}
+
+func (e *ItemKindMismatchError) Unwrap() error {
+	return &e.APIError
+}
+
+// ItemTaxRequiredError is the API's 422 ITEM_TAX_REQUIRED: the item's tax
+// situation needs an ICMS base and rate the catalog does not keep, so the
+// line at Index must send its own tax. errors.As still finds the
+// *APIError inside.
+type ItemTaxRequiredError struct {
+	APIError
+	Message string
+	ItemID  string
+	Index   int
+}
+
+func (e *ItemTaxRequiredError) Unwrap() error {
+	return &e.APIError
+}
+
 type companyErrorDetail struct {
 	Error       string              `json:"error"`
 	Code        string              `json:"code"`
@@ -142,6 +212,9 @@ type companyErrorDetail struct {
 	Companies   []AuthorizedCompany `json:"companies"`
 	Message     string              `json:"message"`
 	ClientID    string              `json:"client_id"`
+	ItemID      string              `json:"item_id"`
+	Field       string              `json:"field"`
+	Index       int                 `json:"index"`
 }
 
 type rateLimitBody struct {
@@ -177,6 +250,16 @@ func newAPIError(status int, detail string, raw json.RawMessage, body []byte, he
 		return &ClientInactiveError{APIError: base, Message: parsed.Message, ClientID: parsed.ClientID}
 	case status == http.StatusNotFound && parsed.Code == "CLIENT_NOT_FOUND":
 		return &ClientNotFoundError{APIError: base, Message: parsed.Message, ClientID: parsed.ClientID}
+	case status == http.StatusConflict && parsed.Code == "ITEM_EXISTS":
+		return &ItemAlreadyExistsError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID, Field: parsed.Field}
+	case status == http.StatusNotFound && parsed.Code == "ITEM_NOT_FOUND":
+		return &ItemNotFoundError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID}
+	case status == http.StatusUnprocessableEntity && parsed.Code == "ITEM_INACTIVE":
+		return &ItemInactiveError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID}
+	case status == http.StatusUnprocessableEntity && parsed.Code == "ITEM_KIND_MISMATCH":
+		return &ItemKindMismatchError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID, Index: parsed.Index}
+	case status == http.StatusUnprocessableEntity && parsed.Code == "ITEM_TAX_REQUIRED":
+		return &ItemTaxRequiredError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID, Index: parsed.Index}
 	}
 	return &base
 }
