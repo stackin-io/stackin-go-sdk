@@ -205,6 +205,22 @@ func (e *ItemTaxRequiredError) Unwrap() error {
 	return &e.APIError
 }
 
+// ItemTaxRegimeMismatchError is the API's 422 ITEM_TAX_REGIME_MISMATCH: the
+// item's CST/CSOSN does not fit the company's tax regime (a CSOSN is for
+// Simples Nacional, a CST for the rest), or is not allowed on an export
+// CFOP. Send the line's own Tax, or fix the item. Index is the line.
+// errors.As still finds the *APIError inside.
+type ItemTaxRegimeMismatchError struct {
+	APIError
+	Message string
+	ItemID  string
+	Index   int
+}
+
+func (e *ItemTaxRegimeMismatchError) Unwrap() error {
+	return &e.APIError
+}
+
 type companyErrorDetail struct {
 	Error       string              `json:"error"`
 	Code        string              `json:"code"`
@@ -258,6 +274,8 @@ func newAPIError(status int, detail string, raw json.RawMessage, body []byte, he
 		return &ItemInactiveError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID}
 	case status == http.StatusUnprocessableEntity && parsed.Code == "ITEM_KIND_MISMATCH":
 		return &ItemKindMismatchError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID, Index: parsed.Index}
+	case status == http.StatusUnprocessableEntity && parsed.Code == "ITEM_TAX_REGIME_MISMATCH":
+		return &ItemTaxRegimeMismatchError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID, Index: parsed.Index}
 	case status == http.StatusUnprocessableEntity && parsed.Code == "ITEM_TAX_REQUIRED":
 		return &ItemTaxRequiredError{APIError: base, Message: parsed.Message, ItemID: parsed.ItemID, Index: parsed.Index}
 	}

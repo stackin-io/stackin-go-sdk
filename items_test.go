@@ -266,6 +266,10 @@ func TestIssueRefusalsAreTypedItemErrors(t *testing.T) {
 			var e *ItemKindMismatchError
 			return errors.As(err, &e) && e.ItemID == itemID && e.Index == 2
 		}},
+		{"ITEM_TAX_REGIME_MISMATCH", func(err error) bool {
+			var e *ItemTaxRegimeMismatchError
+			return errors.As(err, &e) && e.ItemID == itemID && e.Index == 2
+		}},
 		{"ITEM_TAX_REQUIRED", func(err error) bool {
 			var e *ItemTaxRequiredError
 			return errors.As(err, &e) && e.ItemID == itemID && e.Index == 2
