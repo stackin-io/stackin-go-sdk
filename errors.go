@@ -288,7 +288,8 @@ func (e *APIError) fill(raw json.RawMessage, body []byte) {
 	}
 
 	var detail errorFields
-	if len(raw) > 0 && raw[0] == '{' && json.Unmarshal(raw, &detail) == nil {
+	if len(raw) > 0 && raw[0] == '{' {
+		_ = json.Unmarshal(raw, &detail)
 		if detail.Code != "" {
 			e.Code = detail.Code
 		}
