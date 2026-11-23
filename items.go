@@ -30,6 +30,21 @@ func priceWire(number *float64, text string) (string, error) {
 	return "", nil
 }
 
+func validateItemWeights(weights ...*float64) error {
+	for _, weight := range weights {
+		if weight == nil {
+			continue
+		}
+		if *weight < 0 {
+			return &InvoiceError{Message: "weights can't be negative"}
+		}
+		if decimalPlaces(*weight) > 6 {
+			return &InvoiceError{Message: "weights allow at most 6 decimal places"}
+		}
+	}
+	return nil
+}
+
 // Items reads and edits the company's catalog of products and services,
 // and Product.ItemID issues a line from one. The catalog is one table told
 // apart by Kind: "product" for goods (NF-e) and "service" for services
@@ -118,10 +133,8 @@ type ItemFields struct {
 
 // MarshalJSON writes the unit price as a decimal string.
 func (f ItemFields) MarshalJSON() ([]byte, error) {
-	for _, weight := range []*float64{f.NetWeight, f.GrossWeight} {
-		if weight != nil && *weight < 0 {
-			return nil, &InvoiceError{Message: "weights can't be negative"}
-		}
+	if err := validateItemWeights(f.NetWeight, f.GrossWeight); err != nil {
+		return nil, err
 	}
 	price, err := priceWire(f.UnitPrice, f.UnitPriceText)
 	if err != nil {
@@ -194,10 +207,8 @@ func (changes ItemChanges) body() (map[string]any, error) {
 		{"ibs_cbs_cst", changes.IbsCbsCST},
 		{"ibs_cbs_class", changes.IbsCbsClass},
 	}
-	for _, weight := range []*float64{changes.NetWeight, changes.GrossWeight} {
-		if weight != nil && *weight < 0 {
-			return nil, &InvoiceError{Message: "weights can't be negative"}
-		}
+	if err := validateItemWeights(changes.NetWeight, changes.GrossWeight); err != nil {
+		return nil, err
 	}
 	for _, text := range texts {
 		switch {

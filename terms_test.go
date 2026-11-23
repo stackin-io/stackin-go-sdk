@@ -261,13 +261,19 @@ func TestTermsAcceptAllowedPlaces(t *testing.T) {
 	}
 }
 
-func TestProductAndCatalogWeightsHaveNoPlacesLimit(t *testing.T) {
+func TestCatalogWeightsAllowSixPlaces(t *testing.T) {
 	items, seen := newItems(t, http.StatusCreated, map[string]any{"id": itemID})
-	if _, err := items.Create(ItemFields{Kind: "product", Description: "x", NetWeight: ptr(0.1234567)}); err != nil {
+	if _, err := items.Create(ItemFields{Kind: "product", Description: "x", NetWeight: ptr(0.123456)}); err != nil {
 		t.Fatal(err)
 	}
 	if len(*seen) != 1 {
-		t.Error("catalog weight with many places was refused")
+		t.Error("catalog weight with 6 places was refused")
+	}
+	if _, err := items.Create(ItemFields{Kind: "product", Description: "x", GrossWeight: ptr(0.1234567)}); err == nil {
+		t.Error("7 places accepted")
+	}
+	if _, err := items.Update(itemID, ItemChanges{NetWeight: ptr(0.1234567)}); err == nil {
+		t.Error("7 places accepted on update")
 	}
 }
 

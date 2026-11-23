@@ -228,7 +228,7 @@ inv.Issue(stackin.IssueRequest{ /* ... */
 })
 ```
 
-Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST` and `IbsCbsClass` (`ItemFields` and `ItemChanges`). `ItemChanges.ClearNetWeight` and `ClearGrossWeight` send null to clear a weight.
+Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST` and `IbsCbsClass` (`ItemFields` and `ItemChanges`). Catalog weights are checked for at least 0 and at most 6 decimal places. `ItemChanges.ClearNetWeight` and `ClearGrossWeight` send null to clear a weight.
 
 `Contingency` — NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Left `false`, nothing is sent:
 
