@@ -101,6 +101,11 @@ type Product struct {
 	PurchaseOrder     *string
 	PurchaseOrderItem *string
 
+	// NetWeight and GrossWeight are one unit's weight in kg, NF-e only. A
+	// pointer so a real 0 can be sent.
+	NetWeight   *float64
+	GrossWeight *float64
+
 	NCM                        *string
 	CFOP                       *string
 	CEST                       *string
@@ -150,6 +155,8 @@ func (p Product) ToDict() map[string]any {
 	setIfNotNil(data, "other_expenses", p.OtherExpenses)
 	setIfNotNil(data, "purchase_order", p.PurchaseOrder)
 	setIfNotNil(data, "purchase_order_item", p.PurchaseOrderItem)
+	setIfNotNil(data, "net_weight", p.NetWeight)
+	setIfNotNil(data, "gross_weight", p.GrossWeight)
 
 	br := map[string]any{}
 	setIfNotNil(br, "ncm", p.NCM)

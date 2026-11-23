@@ -215,6 +215,21 @@ After:   state, city, federal := 0.1, 0.0, 0.9
          IbsCbs{RateState: &state, RateCity: &city, RateFederal: &federal}
 ```
 
+NF-e sale terms (all optional, NF-e only, sent only when set): `Presence` (`"0"`-`"5"`, `"9"`), `Intermediary`, `Transport`, `Payments` and `Change`. `Product.NetWeight` and `GrossWeight` are one unit's kg. Pointers (`Volume.Quantity *int`, the weights and `Change *float64`) let a real `0` go out; `Payment.Amount` is always sent. A nil `Transport.Volumes` is left out and an empty non-nil one is sent as `[]`. The SDK checks only the code sets of `Presence` and `FreightMode`, a two-digit `Method`, `Description` on method `"99"`, weights of at least 0, at most 100 payments and a 2-60 character `Intermediary.Identifier`; the fiscal rules are the API's. `Reissue` takes none of them: it reuses the stored terms, and `SaleTermsOf(detail)` reads them back.
+
+```go
+zero := 0.0
+inv.Issue(stackin.IssueRequest{ /* ... */
+	Presence:     "2",
+	Intermediary: &stackin.Intermediary{TaxID: "11222333000181", Identifier: "loja-1"},
+	Transport:    &stackin.Transport{FreightMode: "1", Volumes: []stackin.Volume{{Species: "CAIXA", NetWeight: &zero}}},
+	Payments:     []stackin.Payment{{Method: "17", Amount: 100}},
+	Change:       &zero,
+})
+```
+
+Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST` and `IbsCbsClass` (`ItemFields` and `ItemChanges`).
+
 `Contingency` — NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Left `false`, nothing is sent:
 
 ```go
