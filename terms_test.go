@@ -120,6 +120,16 @@ func TestTermsLocalValidation(t *testing.T) {
 		{"negative gross weight", func(r *IssueRequest) {
 			r.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{GrossWeight: ptr(-0.1)}}}
 		}, "gross_weight can't be negative"},
+		{"volume net weight places", func(r *IssueRequest) {
+			r.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{NetWeight: ptr(1.2345)}}}
+		}, "net_weight allows at most 3 decimal places"},
+		{"volume gross weight places", func(r *IssueRequest) {
+			r.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{GrossWeight: ptr(0.0001)}}}
+		}, "gross_weight allows at most 3 decimal places"},
+		{"amount places", func(r *IssueRequest) { r.Payments = []Payment{{Method: "01", Amount: 10.005}} }, "amount allows at most 2"},
+		{"negative amount", func(r *IssueRequest) { r.Payments = []Payment{{Method: "01", Amount: -1}} }, "amount can't be negative"},
+		{"change places", func(r *IssueRequest) { r.Change = ptr(1.001) }, "change allows at most 2"},
+		{"negative change", func(r *IssueRequest) { r.Change = ptr(-1.0) }, "change can't be negative"},
 		{"method shape", func(r *IssueRequest) { r.Payments = []Payment{{Method: "1"}} }, "two-digit"},
 		{"method 99 without description", func(r *IssueRequest) { r.Payments = []Payment{{Method: "99", Amount: 1}} }, "required for method 99"},
 		{"too many payments", func(r *IssueRequest) { r.Payments = make([]Payment, 101) }, "at most 100"},
@@ -238,5 +248,42 @@ func TestItemsRefuseNegativeWeight(t *testing.T) {
 	}
 	if len(*seen) != 0 {
 		t.Error("request went out")
+	}
+}
+
+func TestTermsAcceptAllowedPlaces(t *testing.T) {
+	req := nfeRequest(nfeItem())
+	req.Change = ptr(0.3)
+	req.Payments = []Payment{{Method: "01", Amount: 0.1 + 0.2}, {Method: "01", Amount: 12.34}}
+	req.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{NetWeight: ptr(1.234), GrossWeight: ptr(0.0)}}}
+	if _, called, err := captureIssue(t, req); err != nil || !called {
+		t.Errorf("err = %v called = %v", err, called)
+	}
+}
+
+func TestProductAndCatalogWeightsHaveNoPlacesLimit(t *testing.T) {
+	items, seen := newItems(t, http.StatusCreated, map[string]any{"id": itemID})
+	if _, err := items.Create(ItemFields{Kind: "product", Description: "x", NetWeight: ptr(0.1234567)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(*seen) != 1 {
+		t.Error("catalog weight with many places was refused")
+	}
+}
+
+func TestItemsUpdateClearsWeights(t *testing.T) {
+	items, seen := newItems(t, http.StatusOK, map[string]any{"id": itemID})
+	if _, err := items.Update(itemID, ItemChanges{ClearNetWeight: true, ClearGrossWeight: true}); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"net_weight": nil, "gross_weight": nil}
+	if got := (*seen)[0].Body; !reflect.DeepEqual(got, want) {
+		t.Errorf("body %v", got)
+	}
+	if _, err := items.Update(itemID, ItemChanges{ClearNetWeight: true, NetWeight: ptr(2.0)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := (*seen)[1].Body["net_weight"]; got != 2.0 {
+		t.Errorf("net_weight = %v, want the set value", got)
 	}
 }
