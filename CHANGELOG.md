@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.25.0 — 2026-11-23
+
+### Features
+- **items:** check catalog weights to 6 decimal places (#53)
+- **invoice:** decimal-place checks on payments, change and volume weights; clear catalog weights (#53)
+- **invoice:** NF-e sale terms, weights and catalog IBS/CBS codes (#53)
+
+### Bug Fixes
+- **invoice:** refuse empty payments and negative line weights, rename TransportVolume (#53)
+
+### Docs
+- **changelog:** drop stale Unreleased section (#51)
+
 ## v0.24.0 — 2026-11-22
 
 ### Features
