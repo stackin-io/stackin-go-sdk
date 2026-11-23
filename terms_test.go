@@ -28,7 +28,7 @@ func TestTermsSentWithRealZeros(t *testing.T) {
 	req := nfeRequest(nfeItem())
 	req.Presence = "0"
 	req.Intermediary = &Intermediary{TaxID: "11222333000181", Identifier: "loja-1"}
-	req.Transport = &Transport{FreightMode: "0", Volumes: []Volume{{
+	req.Transport = &Transport{FreightMode: "0", Volumes: []TransportVolume{{
 		Quantity: ptr(0), Species: "CAIXA", NetWeight: ptr(0.0), GrossWeight: ptr(1.5),
 	}}}
 	req.Payments = []Payment{
@@ -71,8 +71,8 @@ func TestTransportVolumesNilOmittedEmptySent(t *testing.T) {
 		want string
 	}{
 		{"nil", Transport{FreightMode: "9"}, `{"freight_mode":"9"}`},
-		{"empty", Transport{FreightMode: "9", Volumes: []Volume{}}, `{"freight_mode":"9","volumes":[]}`},
-		{"unset volume fields", Transport{FreightMode: "1", Volumes: []Volume{{}}}, `{"freight_mode":"1","volumes":[{}]}`},
+		{"empty", Transport{FreightMode: "9", Volumes: []TransportVolume{}}, `{"freight_mode":"9","volumes":[]}`},
+		{"unset volume fields", Transport{FreightMode: "1", Volumes: []TransportVolume{{}}}, `{"freight_mode":"1","volumes":[{}]}`},
 	}
 	for _, c := range cases {
 		out, err := json.Marshal(c.in)
@@ -115,16 +115,16 @@ func TestTermsLocalValidation(t *testing.T) {
 		{"presence", func(r *IssueRequest) { r.Presence = "7" }, "presence must be"},
 		{"freight mode", func(r *IssueRequest) { r.Transport = &Transport{FreightMode: "5"} }, "freight_mode"},
 		{"negative net weight", func(r *IssueRequest) {
-			r.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{NetWeight: ptr(-1.0)}}}
+			r.Transport = &Transport{FreightMode: "1", Volumes: []TransportVolume{{NetWeight: ptr(-1.0)}}}
 		}, "net_weight can't be negative"},
 		{"negative gross weight", func(r *IssueRequest) {
-			r.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{GrossWeight: ptr(-0.1)}}}
+			r.Transport = &Transport{FreightMode: "1", Volumes: []TransportVolume{{GrossWeight: ptr(-0.1)}}}
 		}, "gross_weight can't be negative"},
 		{"volume net weight places", func(r *IssueRequest) {
-			r.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{NetWeight: ptr(1.2345)}}}
+			r.Transport = &Transport{FreightMode: "1", Volumes: []TransportVolume{{NetWeight: ptr(1.2345)}}}
 		}, "net_weight allows at most 3 decimal places"},
 		{"volume gross weight places", func(r *IssueRequest) {
-			r.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{GrossWeight: ptr(0.0001)}}}
+			r.Transport = &Transport{FreightMode: "1", Volumes: []TransportVolume{{GrossWeight: ptr(0.0001)}}}
 		}, "gross_weight allows at most 3 decimal places"},
 		{"amount places", func(r *IssueRequest) { r.Payments = []Payment{{Method: "01", Amount: 10.005}} }, "amount allows at most 2"},
 		{"negative amount", func(r *IssueRequest) { r.Payments = []Payment{{Method: "01", Amount: -1}} }, "amount can't be negative"},
@@ -132,7 +132,8 @@ func TestTermsLocalValidation(t *testing.T) {
 		{"negative change", func(r *IssueRequest) { r.Change = ptr(-1.0) }, "change can't be negative"},
 		{"method shape", func(r *IssueRequest) { r.Payments = []Payment{{Method: "1"}} }, "two-digit"},
 		{"method 99 without description", func(r *IssueRequest) { r.Payments = []Payment{{Method: "99", Amount: 1}} }, "required for method 99"},
-		{"too many payments", func(r *IssueRequest) { r.Payments = make([]Payment, 101) }, "at most 100"},
+		{"empty payments", func(r *IssueRequest) { r.Payments = []Payment{} }, "payments needs 1 to 100"},
+		{"too many payments", func(r *IssueRequest) { r.Payments = make([]Payment, 101) }, "payments needs 1 to 100"},
 		{"identifier", func(r *IssueRequest) { r.Intermediary = &Intermediary{TaxID: "1", Identifier: "a"} }, "identifier"},
 	}
 	for _, c := range cases {
@@ -255,7 +256,7 @@ func TestTermsAcceptAllowedPlaces(t *testing.T) {
 	req := nfeRequest(nfeItem())
 	req.Change = ptr(0.3)
 	req.Payments = []Payment{{Method: "01", Amount: 0.1 + 0.2}, {Method: "01", Amount: 12.34}}
-	req.Transport = &Transport{FreightMode: "1", Volumes: []Volume{{NetWeight: ptr(1.234), GrossWeight: ptr(0.0)}}}
+	req.Transport = &Transport{FreightMode: "1", Volumes: []TransportVolume{{NetWeight: ptr(1.234), GrossWeight: ptr(0.0)}}}
 	if _, called, err := captureIssue(t, req); err != nil || !called {
 		t.Errorf("err = %v called = %v", err, called)
 	}
@@ -291,5 +292,18 @@ func TestItemsUpdateClearsWeights(t *testing.T) {
 	}
 	if got := (*seen)[1].Body["net_weight"]; got != 2.0 {
 		t.Errorf("net_weight = %v, want the set value", got)
+	}
+}
+
+func TestIssueRefusesNegativeLineWeights(t *testing.T) {
+	for name, product := range map[string]func(*br.Product){
+		"net":   func(p *br.Product) { p.NetWeight = ptr(-0.1) },
+		"gross": func(p *br.Product) { p.GrossWeight = ptr(-1.0) },
+	} {
+		item := nfeItem()
+		product(&item)
+		req := nfeRequest(item)
+		expectRefusal(t, req, "can't be negative")
+		_ = name
 	}
 }

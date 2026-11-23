@@ -197,7 +197,7 @@ type IssueRequest struct {
 	// when nil.
 	Transport *Transport
 
-	// Payments are the detPag entries, up to 100. NF-e only, omitted when
+	// Payments are the detPag entries, 1 to 100 (an empty non-nil slice is refused); Amount and Change take at most 2 decimal places. NF-e only, omitted when
 	// empty.
 	Payments []Payment
 
