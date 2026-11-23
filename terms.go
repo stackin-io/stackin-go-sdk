@@ -213,6 +213,15 @@ func decimalFromJSON(raw json.RawMessage) (*float64, error) {
 	return &value, nil
 }
 
+func decimalPlaces(value float64) int {
+	text := br.DecimalString(value)
+	dot := strings.IndexByte(text, '.')
+	if dot < 0 {
+		return 0
+	}
+	return len(text) - dot - 1
+}
+
 func validateTerms(req IssueRequest) error {
 	if req.Presence != "" && !presenceCodes[req.Presence] {
 		return &InvoiceError{Message: fmt.Sprintf(
@@ -225,6 +234,14 @@ func validateTerms(req IssueRequest) error {
 			return &InvoiceError{Message: "intermediary.identifier must be 2 to 60 characters"}
 		}
 	}
+	if req.Change != nil {
+		if *req.Change < 0 {
+			return &InvoiceError{Message: "change can't be negative"}
+		}
+		if decimalPlaces(*req.Change) > 2 {
+			return &InvoiceError{Message: "change allows at most 2 decimal places"}
+		}
+	}
 	if req.Transport != nil {
 		if !freightModeCodes[req.Transport.FreightMode] {
 			return &InvoiceError{Message: fmt.Sprintf(
@@ -232,11 +249,18 @@ func validateTerms(req IssueRequest) error {
 			)}
 		}
 		for i, volume := range req.Transport.Volumes {
-			if volume.NetWeight != nil && *volume.NetWeight < 0 {
-				return &InvoiceError{Message: fmt.Sprintf("transport.volumes[%d].net_weight can't be negative", i)}
-			}
-			if volume.GrossWeight != nil && *volume.GrossWeight < 0 {
-				return &InvoiceError{Message: fmt.Sprintf("transport.volumes[%d].gross_weight can't be negative", i)}
+			for name, weight := range map[string]*float64{
+				"net_weight": volume.NetWeight, "gross_weight": volume.GrossWeight,
+			} {
+				if weight == nil {
+					continue
+				}
+				if *weight < 0 {
+					return &InvoiceError{Message: fmt.Sprintf("transport.volumes[%d].%s can't be negative", i, name)}
+				}
+				if decimalPlaces(*weight) > 3 {
+					return &InvoiceError{Message: fmt.Sprintf("transport.volumes[%d].%s allows at most 3 decimal places", i, name)}
+				}
 			}
 		}
 	}
@@ -248,6 +272,12 @@ func validateTerms(req IssueRequest) error {
 			return &InvoiceError{Message: fmt.Sprintf(
 				"payments[%d].method must be a two-digit code, not %q", i, payment.Method,
 			)}
+		}
+		if payment.Amount < 0 {
+			return &InvoiceError{Message: fmt.Sprintf("payments[%d].amount can't be negative", i)}
+		}
+		if decimalPlaces(payment.Amount) > 2 {
+			return &InvoiceError{Message: fmt.Sprintf("payments[%d].amount allows at most 2 decimal places", i)}
 		}
 		if payment.Method == "99" && strings.TrimSpace(payment.Description) == "" {
 			return &InvoiceError{Message: fmt.Sprintf(

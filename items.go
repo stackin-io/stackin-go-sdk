@@ -161,8 +161,12 @@ type ItemChanges struct {
 	ISSRetained       *bool
 	NetWeight         *float64
 	GrossWeight       *float64
-	IbsCbsCST         *string
-	IbsCbsClass       *string
+	// ClearNetWeight and ClearGrossWeight send null, clearing the weight;
+	// a NetWeight or GrossWeight set alongside wins.
+	ClearNetWeight   bool
+	ClearGrossWeight bool
+	IbsCbsCST        *string
+	IbsCbsClass      *string
 	// IsActive pointing at true brings a deactivated item back; see
 	// Reactivate.
 	IsActive *bool
@@ -216,11 +220,17 @@ func (changes ItemChanges) body() (map[string]any, error) {
 	case changes.UnitPrice != nil:
 		body["unit_price"] = br.DecimalString(*changes.UnitPrice)
 	}
-	if changes.NetWeight != nil {
+	switch {
+	case changes.NetWeight != nil:
 		body["net_weight"] = *changes.NetWeight
+	case changes.ClearNetWeight:
+		body["net_weight"] = nil
 	}
-	if changes.GrossWeight != nil {
+	switch {
+	case changes.GrossWeight != nil:
 		body["gross_weight"] = *changes.GrossWeight
+	case changes.ClearGrossWeight:
+		body["gross_weight"] = nil
 	}
 	if changes.ISSRetained != nil {
 		body["iss_retained"] = *changes.ISSRetained
