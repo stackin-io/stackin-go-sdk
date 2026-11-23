@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **invoice:** ReceivedXML, ConsultByDPS and Validate (#49)
+- **errors:** Code, Field, Retryable, DocumentID and SefazRejection on APIError (#49)
+- **webhooks:** received_invoice.stored and received_invoice.full_document events (#49)
+
 ## v0.23.0 — 2026-11-22
 
 ### Breaking Changes

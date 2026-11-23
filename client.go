@@ -420,6 +420,15 @@ func validateIssueFields(req IssueRequest) error {
 const nfeDescriptionLimit = 120
 
 func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
+	payload, err := buildIssuePayload(req)
+	if err != nil {
+		return nil, err
+	}
+	return inv.request(http.MethodPost, "/invoices", payload, nil,
+		WithIdempotencyKey(req.IdempotencyKey))
+}
+
+func buildIssuePayload(req IssueRequest) (map[string]any, error) {
 	if len(req.Items) == 0 {
 		return nil, &InvoiceError{Message: "items can't be empty"}
 	}
@@ -539,13 +548,25 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 		payload["contingency"] = true
 	}
 
-	return inv.request(http.MethodPost, "/invoices", payload, nil,
-		WithIdempotencyKey(req.IdempotencyKey))
+	return payload, nil
 }
 
 func (inv *Invoice) Consult(accessKey string, documentType DocumentType) (map[string]any, error) {
 	params := url.Values{"document_type": {string(documentType)}}
 	return inv.request(http.MethodGet, "/invoices/"+accessKey, nil, params)
+}
+
+// ConsultByDPS reads an NFS-e by the DPS id the authority was sent, the
+// document_id of an OUTCOME_UNKNOWN error. It answers like Consult and may
+// carry status "cancelled". The API answers 400 when the id is not this
+// company's and 404 when the authority holds no note for it, meaning
+// nothing was issued.
+func (inv *Invoice) ConsultByDPS(dpsID string) (map[string]any, error) {
+	id, err := segment(dpsID)
+	if err != nil {
+		return nil, err
+	}
+	return inv.request(http.MethodGet, "/invoices/dps/"+id, nil, nil)
 }
 
 // Cancel voids an authorized document. Pass WithIdempotencyKey to make a
@@ -733,6 +754,18 @@ func (inv *Invoice) Manifest(accessKey string, manifestation Manifestation, reas
 func (inv *Invoice) Pdf(accessKey string, documentType DocumentType) ([]byte, error) {
 	params := url.Values{"document_type": {string(documentType)}}
 	return inv.send(http.MethodGet, "/invoices/"+accessKey+"/pdf", nil, params)
+}
+
+// ReceivedXML returns the full XML (procNFe) of a received document as raw
+// bytes. A document held only as a summary answers 409 with code
+// RECEIVED_XML_NOT_AVAILABLE until it is manifested; 402 is a
+// *PaymentRequiredError. Downloading is never billed.
+func (inv *Invoice) ReceivedXML(accessKey string) ([]byte, error) {
+	key, err := segment(accessKey)
+	if err != nil {
+		return nil, err
+	}
+	return inv.send(http.MethodGet, "/received-invoices/"+key+"/xml", nil, nil)
 }
 
 // Submissions returns every attempt made for one invoice, with what the
