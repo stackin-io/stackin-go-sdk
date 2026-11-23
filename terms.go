@@ -31,10 +31,10 @@ type Intermediary struct {
 	Identifier string `json:"identifier"`
 }
 
-// Volume is one transp/vol group. Every field is optional and sent only
+// TransportVolume is one transp/vol group. Every field is optional and sent only
 // when set; the pointers let a real 0 go out. Weights are in kg with at
 // most 3 decimal places.
-type Volume struct {
+type TransportVolume struct {
 	Quantity    *int     `json:"quantity,omitempty"`
 	Species     string   `json:"species,omitempty"`
 	Brand       string   `json:"brand,omitempty"`
@@ -48,7 +48,7 @@ type Volume struct {
 // empty non-nil slice is sent as [] and writes none.
 type Transport struct {
 	FreightMode string
-	Volumes     []Volume
+	Volumes     []TransportVolume
 }
 
 func (t Transport) MarshalJSON() ([]byte, error) {
@@ -70,13 +70,13 @@ func (t *Transport) UnmarshalJSON(data []byte) error {
 	t.FreightMode = raw.FreightMode
 	t.Volumes = nil
 	if len(raw.Volumes) > 0 && string(raw.Volumes) != "null" {
-		t.Volumes = []Volume{}
+		t.Volumes = []TransportVolume{}
 		return json.Unmarshal(raw.Volumes, &t.Volumes)
 	}
 	return nil
 }
 
-func (v *Volume) UnmarshalJSON(data []byte) error {
+func (v *TransportVolume) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		Quantity    *int            `json:"quantity"`
 		Species     string          `json:"species"`
@@ -96,7 +96,7 @@ func (v *Volume) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("gross_weight: %w", err)
 	}
-	*v = Volume{
+	*v = TransportVolume{
 		Quantity: raw.Quantity, Species: raw.Species, Brand: raw.Brand,
 		Numbering: raw.Numbering, NetWeight: net, GrossWeight: gross,
 	}
@@ -264,8 +264,11 @@ func validateTerms(req IssueRequest) error {
 			}
 		}
 	}
+	if req.Payments != nil && len(req.Payments) == 0 {
+		return &InvoiceError{Message: "payments needs 1 to 100 entries"}
+	}
 	if len(req.Payments) > 100 {
-		return &InvoiceError{Message: "payments allows at most 100 entries"}
+		return &InvoiceError{Message: "payments needs 1 to 100 entries"}
 	}
 	for i, payment := range req.Payments {
 		if !paymentMethodPattern.MatchString(payment.Method) {

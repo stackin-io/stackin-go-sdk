@@ -23,6 +23,12 @@ var (
 // group. Issue calls it for every item and returns the failure as an
 // *InvoiceError naming the item.
 func validateProduct(p br.Product) error {
+	if p.NetWeight != nil && *p.NetWeight < 0 {
+		return errors.New("net_weight can't be negative")
+	}
+	if p.GrossWeight != nil && *p.GrossWeight < 0 {
+		return errors.New("gross_weight can't be negative")
+	}
 	if p.NCM != nil && *p.NCM != "" && !ncmPattern.MatchString(*p.NCM) {
 		return errors.New("ncm must be the full 8 digits, or 00 for a service line")
 	}
