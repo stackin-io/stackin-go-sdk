@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.24.0 — 2026-11-22
+
+### Features
+- **invoice:** ReceivedXML, ConsultByDPS, Validate and structured API errors (#49)
+
+### Bug Fixes
+- **errors:** keep parsed fields when one detail value has an unexpected type (#49)
+
 ## Unreleased
 
 ### Features
