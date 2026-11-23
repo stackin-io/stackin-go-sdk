@@ -185,6 +185,26 @@ type IssueRequest struct {
 	// checks the merged request. Omitted when empty.
 	ClientID string
 
+	// Presence is indPres, how the buyer took part: 0, 1, 2, 3, 4, 5 or 9.
+	// NF-e only, omitted when empty.
+	Presence string
+
+	// Intermediary is the marketplace or platform the sale went through.
+	// NF-e only, omitted when nil.
+	Intermediary *Intermediary
+
+	// Transport is the freight mode and the volumes. NF-e only, omitted
+	// when nil.
+	Transport *Transport
+
+	// Payments are the detPag entries, up to 100. NF-e only, omitted when
+	// empty.
+	Payments []Payment
+
+	// Change is vTroco in BRL, what the payments exceed the total by. A
+	// pointer so a 0 can be sent. NF-e only, omitted when nil.
+	Change *float64
+
 	// Contingency sends an NF-e through the UF's contingency authorizer
 	// (SVC-AN or SVC-RS, tpEmis 6/7) for when its own is down. Sent only
 	// when true.
@@ -437,6 +457,10 @@ func buildIssuePayload(req IssueRequest) (map[string]any, error) {
 		return nil, err
 	}
 
+	if err := validateTerms(req); err != nil {
+		return nil, err
+	}
+
 	for i, item := range req.Items {
 		if err := validateProduct(item); err != nil {
 			return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].%s", i, err.Error())}
@@ -543,6 +567,21 @@ func buildIssuePayload(req IssueRequest) (map[string]any, error) {
 	}
 	if req.Export != nil {
 		payload["export"] = req.Export
+	}
+	if req.Presence != "" {
+		payload["presence"] = req.Presence
+	}
+	if req.Intermediary != nil {
+		payload["intermediary"] = req.Intermediary
+	}
+	if req.Transport != nil {
+		payload["transport"] = req.Transport
+	}
+	if len(req.Payments) > 0 {
+		payload["payments"] = req.Payments
+	}
+	if req.Change != nil {
+		payload["change"] = br.DecimalString(*req.Change)
 	}
 	if req.Contingency {
 		payload["contingency"] = true

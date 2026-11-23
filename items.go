@@ -106,10 +106,23 @@ type ItemFields struct {
 	GTIN         string `json:"gtin,omitempty"`
 	ServiceCode  string `json:"service_code,omitempty"`
 	ISSRetained  *bool  `json:"iss_retained,omitempty"`
+	// NetWeight and GrossWeight are one unit's weight in kg (a product);
+	// pointers so a real 0 can be sent.
+	NetWeight   *float64 `json:"net_weight,omitempty"`
+	GrossWeight *float64 `json:"gross_weight,omitempty"`
+	// IbsCbsCST (3 digits) and IbsCbsClass (cClassTrib, 6 digits) go
+	// together; the API checks them.
+	IbsCbsCST   string `json:"ibs_cbs_cst,omitempty"`
+	IbsCbsClass string `json:"ibs_cbs_class,omitempty"`
 }
 
 // MarshalJSON writes the unit price as a decimal string.
 func (f ItemFields) MarshalJSON() ([]byte, error) {
+	for _, weight := range []*float64{f.NetWeight, f.GrossWeight} {
+		if weight != nil && *weight < 0 {
+			return nil, &InvoiceError{Message: "weights can't be negative"}
+		}
+	}
 	price, err := priceWire(f.UnitPrice, f.UnitPriceText)
 	if err != nil {
 		return nil, err
@@ -146,6 +159,10 @@ type ItemChanges struct {
 	GTIN              *string
 	ServiceCode       *string
 	ISSRetained       *bool
+	NetWeight         *float64
+	GrossWeight       *float64
+	IbsCbsCST         *string
+	IbsCbsClass       *string
 	// IsActive pointing at true brings a deactivated item back; see
 	// Reactivate.
 	IsActive *bool
@@ -170,6 +187,13 @@ func (changes ItemChanges) body() (map[string]any, error) {
 		{"cest", changes.CEST},
 		{"gtin", changes.GTIN},
 		{"service_code", changes.ServiceCode},
+		{"ibs_cbs_cst", changes.IbsCbsCST},
+		{"ibs_cbs_class", changes.IbsCbsClass},
+	}
+	for _, weight := range []*float64{changes.NetWeight, changes.GrossWeight} {
+		if weight != nil && *weight < 0 {
+			return nil, &InvoiceError{Message: "weights can't be negative"}
+		}
 	}
 	for _, text := range texts {
 		switch {
@@ -191,6 +215,12 @@ func (changes ItemChanges) body() (map[string]any, error) {
 		body["unit_price"] = price
 	case changes.UnitPrice != nil:
 		body["unit_price"] = br.DecimalString(*changes.UnitPrice)
+	}
+	if changes.NetWeight != nil {
+		body["net_weight"] = *changes.NetWeight
+	}
+	if changes.GrossWeight != nil {
+		body["gross_weight"] = *changes.GrossWeight
 	}
 	if changes.ISSRetained != nil {
 		body["iss_retained"] = *changes.ISSRetained
