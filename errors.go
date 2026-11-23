@@ -9,9 +9,21 @@ import (
 	"time"
 )
 
+// APIError is any non-2xx answer. Detail is the human message. Code, Field,
+// Retryable, DocumentID, SefazRejection, Expected and Received are filled
+// from the body when it carries them and are zero (nil for Retryable)
+// otherwise. A nil Retryable means the API did not say.
 type APIError struct {
-	StatusCode int
-	Detail     string
+	StatusCode     int
+	Detail         string
+	Code           string
+	Field          string
+	Retryable      *bool
+	DocumentID     string
+	SefazRejection string
+	Expected       string
+	Received       string
+	body           []byte
 }
 
 func (e *APIError) Error() string {
@@ -238,8 +250,61 @@ type rateLimitBody struct {
 	RetryAt string `json:"retry_at"`
 }
 
+type errorFields struct {
+	Code           string `json:"code"`
+	Field          string `json:"field"`
+	Message        string `json:"message"`
+	SefazRejection string `json:"sefaz_rejection"`
+	Expected       string `json:"expected"`
+	Received       string `json:"received"`
+}
+
+type errorBlock struct {
+	Code       string `json:"code"`
+	Retryable  *bool  `json:"retryable"`
+	DocumentID string `json:"document_id"`
+}
+
+type errorBody struct {
+	Code  string          `json:"code"`
+	Error json.RawMessage `json:"error"`
+}
+
+func (e *APIError) fill(raw json.RawMessage, body []byte) {
+	var top errorBody
+	if len(body) > 0 {
+		_ = json.Unmarshal(body, &top)
+	}
+	e.body = body
+	e.Code = top.Code
+
+	var block errorBlock
+	if len(top.Error) > 0 && json.Unmarshal(top.Error, &block) == nil {
+		if block.Code != "" {
+			e.Code = block.Code
+		}
+		e.Retryable = block.Retryable
+		e.DocumentID = block.DocumentID
+	}
+
+	var detail errorFields
+	if len(raw) > 0 && raw[0] == '{' && json.Unmarshal(raw, &detail) == nil {
+		if detail.Code != "" {
+			e.Code = detail.Code
+		}
+		e.Field = detail.Field
+		e.SefazRejection = detail.SefazRejection
+		e.Expected = detail.Expected
+		e.Received = detail.Received
+		if detail.Message != "" {
+			e.Detail = detail.Message
+		}
+	}
+}
+
 func newAPIError(status int, detail string, raw json.RawMessage, body []byte, header http.Header) error {
 	base := APIError{StatusCode: status, Detail: detail}
+	base.fill(raw, body)
 
 	switch status {
 	case http.StatusPaymentRequired:

@@ -531,10 +531,23 @@ stackin.NewInvoice(stackin.WithAPIKey("...")).Issue(stackin.IssueRequest{
 - `ClientEmail` and `ClientPhone` (8 to 15 digits, optional leading `+`) are saved on the client created after a successful issuance, or on an existing one only with `UpdateClient: true`, and only the ones sent. They are also kept on the invoice and sent again on a reissue (which does not touch the client), and written into the fiscal document: NF-e `dest/email` (up to 60 characters) and `dest/enderDest/fone` (digits only, up to 14, only with a `RecipientAddress`); NFS-e `toma/email` (up to 80) and `toma/fone` (up to 20 digits). The phone goes out digits only, area code first; a `+55` is dropped unless the recipient is abroad. A value the layout cannot carry (too long, an e-mail with characters beyond Latin-1) is left out of the document and the issuance goes on.
 - Reading needs `invoice:read`; creating, editing and deactivating need `invoice:issue`. `WithCompany` and `ForCompany` work here as on `Invoice`.
 
+### Reading the XML of a received document
+
+```go
+xml, err := client.ReceivedXML(accessKey)
+if err != nil {
+    log.Fatal(err)
+}
+os.WriteFile(accessKey+".xml", xml, 0o644)
+```
+
+`ReceivedXML` returns the procNFe as raw bytes. A document held only as a summary answers 409 with `Code` `RECEIVED_XML_NOT_AVAILABLE` until it is manifested; 402 is a `*PaymentRequiredError` with `Code` `RECEIVED_PAYMENT_REQUIRED`. Downloading is never billed.
+
 ## Webhooks
 
 `Webhooks` registers where the company's events are delivered: `invoice.authorized`,
-`invoice.rejected`, `invoice.cancelled` and `invoice.corrected` (`stackin.WebhookEvents`).
+`invoice.rejected`, `invoice.cancelled`, `invoice.corrected`, `received_invoice.stored` and
+`received_invoice.full_document` (`stackin.WebhookEvents`).
 An endpoint receives the events of the credential's own environment only.
 
 ```go
@@ -681,9 +694,36 @@ Three things worth knowing before you loop:
 
 `Taxpayer` has one method and keeps one: the registry holds the names and addresses of real people, so there is no search over it, by design.
 
+## Dry run and DPS lookup
+
+`Validate` takes the same `IssueRequest` as `Issue` and runs the API's checks without transmitting, numbering or charging. A document that would be refused is a result, not an error:
+
+```go
+result, err := client.Validate(req)
+if err != nil {
+    log.Fatal(err)
+}
+if !result.Valid {
+    for _, f := range result.Errors {
+        fmt.Println(f.Code, f.Field, f.Message)
+    }
+}
+for _, w := range result.Warnings {
+    fmt.Println(w.Code, w.Message)
+}
+```
+
+Any other refusal (malformed body, unknown client or item, credentials, rate limit) comes back as the error `Issue` would return.
+
+`ConsultByDPS` reads an NFS-e by the DPS id, the `DocumentID` of an `OUTCOME_UNKNOWN` error, and answers like `Consult` (it may carry `status: "cancelled"`). The API answers 400 when the id is not this company's and 404 when the authority holds no note for it, meaning nothing was issued.
+
+```go
+note, err := client.ConsultByDPS(apiErr.DocumentID)
+```
+
 ## Errors
 
-- `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated.
+- `*stackin.APIError` — the API responded with a non-2xx status (`StatusCode`, `Detail`) — a 401 here means `api_key` is missing, wrong, or was rotated. Every error above wraps one, and it also carries what the body says about the failure, zero when absent: `Code` (a rule code, an authority `cStat` or `CONNECTION_FAILED`/`OUTCOME_UNKNOWN`), `Field` (the request path of the offending value), `Retryable` (`*bool`, nil when the API did not say), `DocumentID` (the DPS id of an `OUTCOME_UNKNOWN` NFS-e, for `ConsultByDPS`), `SefazRejection`, `Expected` and `Received`. `Detail` is the message, not the raw JSON, when the body has one.
 - `*stackin.CompanyRequiredError`, `*stackin.CompanyNotInScopeError`, `*stackin.InsufficientPermissionError` — the company or permission answers described under [Several companies on one credential](#several-companies-on-one-credential). Each wraps an `*APIError`.
 - `*stackin.ClientAlreadyExistsError` — 409 `CLIENT_EXISTS`: `Clients.Create` or `Update` with a tax id or foreign id the company already has on another client. `ClientID` names that client. It wraps an `*APIError`.
 - `*stackin.PaymentRequiredError` — any 402: the plan's allowance is spent and neither an overage price nor the account credit covers the call; `Detail` says why. It wraps an `*APIError`.
