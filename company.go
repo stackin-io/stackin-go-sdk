@@ -35,11 +35,7 @@ type CompanyUpdate struct {
 	Address *CompanyAddress
 	// FiscalFields are the company owner's alone: anyone else gets an
 	// *APIError 403, even when the address in the same call would pass.
-	FiscalFields *FiscalFields
-	// BlockActivityMismatch, when true, makes the API refuse an issuance
-	// with MEI_ACTIVITY_NOT_ALLOWED or ACTIVITY_NOT_REGISTERED as a 422
-	// instead of a warning. The owner's alone, anyone else gets an
-	// *APIError 403. A pointer so false is sent too.
+	FiscalFields          *FiscalFields
 	BlockActivityMismatch *bool
 }
 
