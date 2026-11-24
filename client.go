@@ -147,6 +147,11 @@ type IssueRequest struct {
 	// which two requests are meant to be the same one.
 	IdempotencyKey string
 
+	// AcceptLanguage (pt-BR, en or es) localizes the message of the
+	// warnings Issue and Validate answer. Sent as the Accept-Language
+	// header only, never in the body; the header is omitted when empty.
+	AcceptLanguage string `json:"-"`
+
 	// Discount is a discount on the whole document, in BRL, zero or more.
 	// The API spreads it over the lines. Omitted when nil.
 	Discount *float64
@@ -242,6 +247,11 @@ type RequestOption func(*requestConfig)
 
 type requestConfig struct {
 	idempotencyKey string
+	acceptLanguage string
+}
+
+func withAcceptLanguage(language string) RequestOption {
+	return func(cfg *requestConfig) { cfg.acceptLanguage = language }
 }
 
 // WithIdempotencyKey attaches an Idempotency-Key to one call. See
@@ -444,8 +454,30 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return inv.request(http.MethodPost, "/invoices", payload, nil,
-		WithIdempotencyKey(req.IdempotencyKey))
+	raw, err := inv.send(http.MethodPost, "/invoices", payload, nil,
+		WithIdempotencyKey(req.IdempotencyKey),
+		withAcceptLanguage(req.AcceptLanguage))
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed map[string]any
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &parsed)
+	}
+	result, ok := parsed["result"].(map[string]any)
+	if !ok {
+		result = parsed
+		if result == nil {
+			result = map[string]any{}
+		}
+	}
+	warnings, ok := parsed["warnings"].([]any)
+	if !ok || warnings == nil {
+		warnings = []any{}
+	}
+	result["warnings"] = warnings
+	return result, nil
 }
 
 func buildIssuePayload(req IssueRequest) (map[string]any, error) {
@@ -922,6 +954,9 @@ func (inv *transport) sendStatus(method, path string, payload any, params url.Va
 	}
 	if cfg.idempotencyKey != "" {
 		httpReq.Header.Set("Idempotency-Key", cfg.idempotencyKey)
+	}
+	if cfg.acceptLanguage != "" {
+		httpReq.Header.Set("Accept-Language", cfg.acceptLanguage)
 	}
 	if inv.Company != "" {
 		httpReq.Header.Set("X-Stackin-Company", inv.Company)
