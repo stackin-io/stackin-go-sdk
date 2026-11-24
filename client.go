@@ -236,6 +236,20 @@ type IssueRequest struct {
 	// value the layout cannot carry is left out of the document. Omitted
 	// when empty.
 	ClientPhone string
+
+	// RecipientMunicipalRegistration is the tomador's inscrição municipal
+	// (toma/IM), up to 15 letters or digits with masks dropped. NFS-e only.
+	// Omitted when empty.
+	RecipientMunicipalRegistration string
+
+	// ForeignIDMissingReason is cNaoNIF, for an NFS-e tomador abroad without
+	// a ForeignID: 1 exempt from a NIF, 2 the country does not require one.
+	// Omitted when nil.
+	ForeignIDMissingReason *int
+
+	// Nfse holds the NFS-e document-level fields beyond the lines. NFS-e
+	// only, omitted when nil.
+	Nfse *br.NfseDetails
 }
 
 // RequestOption tunes a single call, as opposed to Option, which tunes the
@@ -490,6 +504,10 @@ func buildIssuePayload(req IssueRequest) (map[string]any, error) {
 		return nil, err
 	}
 
+	if err := validateRecipientFields(req); err != nil {
+		return nil, err
+	}
+
 	for i, item := range req.Items {
 		if err := validateProduct(item); err != nil {
 			return nil, &InvoiceError{Message: fmt.Sprintf("items[%d].%s", i, err.Error())}
@@ -614,6 +632,21 @@ func buildIssuePayload(req IssueRequest) (map[string]any, error) {
 	}
 	if req.Contingency {
 		payload["contingency"] = true
+	}
+	if req.RecipientMunicipalRegistration != "" {
+		payload["recipient_municipal_registration"] = unmaskedRegistration(req.RecipientMunicipalRegistration)
+	}
+	if req.ForeignIDMissingReason != nil {
+		payload["foreign_id_missing_reason"] = *req.ForeignIDMissingReason
+	}
+	if req.Nfse != nil {
+		details, err := req.Nfse.ToDict()
+		if err != nil {
+			return nil, &InvoiceError{Message: err.Error()}
+		}
+		if len(details) > 0 {
+			payload["nfse"] = details
+		}
 	}
 
 	return payload, nil

@@ -3,6 +3,7 @@ package stackin
 import (
 	"errors"
 	"regexp"
+	"strings"
 
 	"github.com/stackin-io/stackin-go-sdk/br"
 )
@@ -11,6 +12,9 @@ var (
 	ncmPattern     = regexp.MustCompile(`^(00|\d{8})$`)
 	barcodePattern = regexp.MustCompile(`^(SEM GTIN|\d{8}|\d{12,14})$`)
 	recopiPattern  = regexp.MustCompile(`^\d{20}$`)
+
+	municipalServiceCodePattern = regexp.MustCompile(`^\d{3}$`)
+	internalCodePattern         = regexp.MustCompile(`^[A-Za-z0-9]{1,20}$`)
 )
 
 // validateProduct checks the item fields whose shape is fixed by the NF-e
@@ -50,6 +54,23 @@ func validateProduct(p br.Product) error {
 	}
 	if p.Fuel != nil {
 		if err := validateFuel(*p.Fuel, p.ExtraGroups); err != nil {
+			return err
+		}
+	}
+	if p.MunicipalServiceCode != "" && !municipalServiceCodePattern.MatchString(p.MunicipalServiceCode) {
+		return errors.New("municipal_service_code must be 3 digits")
+	}
+	if p.InternalCode != "" && !internalCodePattern.MatchString(p.InternalCode) {
+		return errors.New("internal_code must be 1 to 20 letters or digits")
+	}
+	if p.ConditionalDiscount != nil {
+		value := *p.ConditionalDiscount
+		if value <= 0 || value > 999999999999999.99 || decimalPlaces(value) > 2 {
+			return errors.New("conditional_discount must be above 0 with at most 2 decimal places")
+		}
+	}
+	if p.IbsCbs != nil {
+		if err := p.IbsCbs.Validate("product.br.ibs_cbs"); err != nil {
 			return err
 		}
 	}
@@ -110,4 +131,21 @@ func validGTINCheckDigit(gtin string) bool {
 		sum += digit
 	}
 	return (10-sum%10)%10 == int(gtin[last]-'0')
+}
+
+var registrationPattern = regexp.MustCompile(`^[A-Za-z0-9]{1,15}$`)
+
+func unmaskedRegistration(value string) string {
+	return strings.NewReplacer(" ", "", ".", "", "/", "", "-", "").Replace(strings.TrimSpace(value))
+}
+
+func validateRecipientFields(req IssueRequest) error {
+	if req.RecipientMunicipalRegistration != "" &&
+		!registrationPattern.MatchString(unmaskedRegistration(req.RecipientMunicipalRegistration)) {
+		return &InvoiceError{Message: "recipient_municipal_registration takes up to 15 letters or digits"}
+	}
+	if req.ForeignIDMissingReason != nil && *req.ForeignIDMissingReason != 1 && *req.ForeignIDMissingReason != 2 {
+		return &InvoiceError{Message: "foreign_id_missing_reason takes 1 (exempt from a NIF) or 2 (the country does not require one); 0 is refused"}
+	}
+	return nil
 }

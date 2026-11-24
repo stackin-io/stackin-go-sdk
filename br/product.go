@@ -26,6 +26,17 @@ type IbsCbs struct {
 	// ReductionCbs is the CBS pRedAliq, in percent: the cClassTrib's pRedCBS.
 	// Sent only when set.
 	ReductionCbs *float64
+
+	// The fields below are NFS-e only and sent only when set.
+	PersonalUse     *bool
+	Government      *IbsCbsGovernment
+	ReferencedNfse  []string
+	Recipient       *IbsCbsRecipient
+	RealEstate      *RealEstate
+	MovableGoods    []MovableGood
+	RegularTaxation *IbsCbsRegularTaxation
+	Deferral        *IbsCbsDeferral
+	PresumedCredit  *string
 }
 
 func (g IbsCbs) toMap() map[string]any {
@@ -40,7 +51,18 @@ func (g IbsCbs) toMap() map[string]any {
 	setIfNotNil(data, "base", g.Base)
 	setIfNotNil(data, "reduction_ibs", g.ReductionIbs)
 	setIfNotNil(data, "reduction_cbs", g.ReductionCbs)
+	extras, _ := g.nfseGroups("product.br.ibs_cbs")
+	for key, value := range extras {
+		data[key] = value
+	}
 	return data
+}
+
+// Validate checks the NFS-e groups of the IBS/CBS group against the shape
+// rules the API enforces, naming the path of the first one it breaks.
+func (g IbsCbs) Validate(path string) error {
+	_, err := g.nfseGroups(path)
+	return err
 }
 
 // Fuel is the NF-e fuel group (comb), needed for a good on a fuel CFOP.
@@ -125,6 +147,13 @@ type Product struct {
 	ServiceCode     *string // LC 116/2003 item.subitem, nfse only
 	NBS             string
 	ServiceDiscount *float64 // unconditional discount, nfse only
+	// MunicipalServiceCode is cTribMun, three digits; InternalCode is
+	// cIntContrib, up to 20 letters or digits; ConditionalDiscount is
+	// vDescCond in BRL, above 0. All nfse only; the API refuses the first on
+	// an MEI.
+	MunicipalServiceCode string
+	InternalCode         string
+	ConditionalDiscount  *float64
 	// TaxRetained is a pointer so false can be sent on a line with an ItemID
 	// (turning off a retention the item has). nil is left to the item, or
 	// sent as false when there is no ItemID.
@@ -214,7 +243,16 @@ func (p Product) ToDict() map[string]any {
 	if p.NBS != "" {
 		result["nbs"] = p.NBS
 	}
+	if p.MunicipalServiceCode != "" {
+		result["municipal_service_code"] = p.MunicipalServiceCode
+	}
+	if p.InternalCode != "" {
+		result["internal_code"] = p.InternalCode
+	}
 	setIfNotNil(result, "discount", p.ServiceDiscount)
+	if p.ConditionalDiscount != nil {
+		result["conditional_discount"] = decimalString(*p.ConditionalDiscount)
+	}
 	setIfNotNil(result, "observations", p.Observations)
 	return result
 }

@@ -2,8 +2,11 @@ package stackin
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var countryISO2Pattern = regexp.MustCompile(`^[A-Z]{2}$`)
 
 // AbroadState is the State of a buyer abroad on an NF-e. Such an address
 // may leave ZipCode and CityCode out and names its country with
@@ -20,6 +23,16 @@ type Address struct {
 	ZipCode      string `json:"zip_code,omitempty"`
 	CountryCode  string `json:"country_code,omitempty"`
 	CountryName  string `json:"country_name,omitempty"`
+	// Complement is the apartment, suite or block, written as xCpl. A
+	// complement too long for the layout is left out by the API with the
+	// warning RECIPIENT_COMPLEMENT_OMITTED.
+	Complement string `json:"complement,omitempty"`
+	// CountryISO2 is the ISO 3166 alpha-2 code of an NFS-e tomador abroad
+	// (State EX), never BR; PostalCode and Province complete its address.
+	// NFS-e only.
+	CountryISO2 string `json:"country_iso2,omitempty"`
+	PostalCode  string `json:"postal_code,omitempty"`
+	Province    string `json:"province,omitempty"`
 }
 
 func (a *Address) abroad() bool {
@@ -50,6 +63,15 @@ func (a Address) validate() error {
 		if field.value != "" && len([]rune(strings.TrimSpace(field.value))) < 2 {
 			return fmt.Errorf("%s must have at least 2 characters", field.name)
 		}
+	}
+	if a.CountryISO2 != "" && !countryISO2Pattern.MatchString(a.CountryISO2) {
+		return fmt.Errorf("country_iso2 must be an ISO 3166 alpha-2 code")
+	}
+	if len([]rune(a.PostalCode)) > 11 {
+		return fmt.Errorf("postal_code must be at most 11 characters")
+	}
+	if len([]rune(a.Province)) > 60 {
+		return fmt.Errorf("province must be at most 60 characters")
 	}
 	return nil
 }
