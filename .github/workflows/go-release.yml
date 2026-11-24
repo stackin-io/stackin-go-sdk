@@ -1,22 +1,5 @@
 name: 📦 Release MOD
 
-# Go has no registry to push to: the module proxy resolves straight from the
-# tag. So this does not publish — it makes the release reproducible. It
-# writes LAST_VERSION from the tag, runs the same tests and lint the branch
-# runs, and then asks the proxy for the version so the first `go get` after
-# a release is not the one paying to warm the cache.
-#
-# It used to *verify* LAST_VERSION instead, which made every release a
-# two-step ritual — bump, push, then tag — and three releases in a row
-# failed because the tag came first. Deriving it from the tag is what the
-# Python SDK does, and there is one source of truth either way.
-#
-# What this cannot fix, and nobody should expect it to: the commit lands
-# after the tag, so the tag itself still carries the previous
-# LAST_VERSION. For Go that is cosmetic — the proxy serves the tagged
-# commit and nothing reads LAST_VERSION at build time — but it is why the
-# file is a record of the last release, not of the tagged tree.
-
 on:
   workflow_dispatch:
     inputs:
@@ -27,77 +10,56 @@ on:
       registry:
         description: go
         required: true
-        type: string
+        type: choice
+        options: [go]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  update-version:
-    name: Write LAST_VERSION from the tag
+  release-tag:
+    name: Check the release tag
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout the default branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 0
-
-      - name: 🔍 Extract version from tag
-        id: version
+      - name: 🔍 Semver tag
         run: |
-          TAG="v${{ inputs.version }}"
-
-          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::The Go proxy needs a semver tag prefixed with v, got $TAG."
+          if ! printf '%s' "v${{ inputs.version }}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Go needs a semver tag prefixed with v, got v${{ inputs.version }}."
             exit 1
           fi
 
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "tag $TAG -> ${TAG#v}"
-
-      - name: 📝 Write LAST_VERSION
-        run: echo "${{ steps.version.outputs.version }}" > LAST_VERSION
-
-      - name: 💾 Commit and push
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add LAST_VERSION
-
-          if git diff --staged --quiet; then
-            echo "LAST_VERSION already says this version"
-            exit 0
-          fi
-
-          git commit -m "📦 MOD: Update version to ${{ steps.version.outputs.version }}"
-          git push origin HEAD:${{ github.event.repository.default_branch }}
+      - name: 📥 Checkout the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/v${{ inputs.version }}
 
   test:
     name: Run Tests
-    needs: [update-version]
+    needs: [release-tag]
     uses: ./.github/workflows/test.yml
     secrets: inherit
 
   code-quality:
     name: Code Quality Checks
-    needs: [update-version]
+    needs: [release-tag]
     uses: ./.github/workflows/code-quality.yml
     secrets: inherit
 
   integration:
     name: Issue a real document
-    needs: [update-version, test, code-quality]
+    needs: [test, code-quality]
     uses: ./.github/workflows/integration.yml
     secrets: inherit
 
   warm-proxy:
     name: Warm the module proxy
-    needs: [update-version, test, code-quality, integration]
+    needs: [test, code-quality, integration]
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout code
+      - name: 📥 Checkout the release tag
         uses: actions/checkout@v4
+        with:
+          ref: refs/tags/v${{ inputs.version }}
 
       - name: 📦 Setup Go
         uses: ./.github/actions/setup-go
