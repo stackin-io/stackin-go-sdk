@@ -250,6 +250,43 @@ inv.Issue(stackin.IssueRequest{
 })
 ```
 
+`FiscalReference.NBSSuggestions` (`GET /service-codes/{service_code}/nbs`) lists the NBS codes NFS-e Anexo VIII pairs with a service code, in any form `ServiceCode` takes (`1.07`, `01.07.00`, `010700`). Each row also carries the `OperationIndicator` (cIndOp) and `IbsCbsClassification` (cClassTrib) the annex pairs with that NBS. They are suggestions only: nothing is written into a document unless you send them as `Product.NBS` and on `Product.IbsCbs`. A code the route cannot read is an `*APIError` 422.
+
+```go
+reference := stackin.NewFiscalReference(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
+found, err := reference.NBSSuggestions("1.07")
+for _, row := range found.Suggestions {
+	fmt.Println(row.NBS, *row.OperationIndicator, *row.IbsCbsClassification)
+}
+```
+
+### NFS-e fields of the DPS
+
+All optional, NFS-e only (the API refuses them on an NF-e), and left out of the request when unset. Decimals are `float64` and go out as decimal strings; dates are `time.Time` and go out as `YYYY-MM-DD`.
+
+- On a line (`br.Product`): `NBS`, `ConditionalDiscount` (BRL, above 0), `MunicipalServiceCode` (3 digits; refused for an MEI) and `InternalCode` (up to 20 letters or digits). `IbsCbs` also takes `PersonalUse`, `Government`, `ReferencedNfse`, `Recipient`, `RealEstate`, `MovableGoods`, `RegularTaxation`, `Deferral` and `PresumedCredit`.
+- On the request: `RecipientMunicipalRegistration` (up to 15 letters or digits, masks dropped), `ForeignIDMissingReason` (1 or 2) and, on `RecipientAddress`, `Complement` and, for a tomador abroad, `CountryISO2`, `PostalCode` and `Province`.
+- `IssueRequest.Nfse` (`*br.NfseDetails`): `ApproximateTaxes`, `CompetenceDate`, `ServiceCityCode` or `ServiceCountryCode`, `Iss`, `Federal`, `Deductions`, `Substitution`, `Construction`, `Event`, `References`, `Intermediary` and `ForeignTrade`.
+
+```go
+inv.Issue(stackin.IssueRequest{
+	DocumentType: stackin.NFSE,
+	// ...
+	Nfse: &br.NfseDetails{
+		CompetenceDate:  time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC),
+		ServiceCityCode: "3550308",
+		ApproximateTaxes: &br.ApproximateTaxes{
+			FederalPercent: ptr(13.45), StatePercent: ptr(0.0), MunicipalPercent: ptr(2.0),
+		},
+		Iss: &br.IssDetails{Rate: ptr(2.5), Retention: "tomador"},
+	},
+})
+```
+
+The API refuses some groups for an MEI: `Deductions` (`DEDUCTIONS_NOT_FOR_MEI`), `Federal` (`FEDERAL_TAXES_NOT_FOR_MEI`), `Iss.Rate`, a retention and `MunicipalServiceCode`. An NFS-e takes one line: more than one is a 422 `NFSE_SINGLE_ITEM`. Findings the API lets through come back in the `warnings` of the result: `APPROXIMATE_TAXES_MISSING`, `IBS_CBS_RECOMMENDED`, `RECIPIENT_COMPLEMENT_OMITTED`, `CONSTRUCTION_RECOMMENDED`, `EVENT_RECOMMENDED` and `FOREIGN_TRADE_RECOMMENDED`. The invoice detail returns the stored `nfse` and `substituted_by_invoice_id`.
+
+The company's own defaults are `FiscalFields.ApproximateTaxSimplesPercent`, `ApproximateTaxFederalPercent`, `ApproximateTaxStatePercent`, `ApproximateTaxMunicipalPercent`, `IssRate`, `MunicipalRegistration` and `SpecialTaxRegime` (see Fixing the issuer); a group sent in `Nfse` overrides them for that document.
+
 ### Activity warnings on issue
 
 `Issue` returns the same result map as before with a `warnings` key added: always present, a `[]any` of `map[string]any` with `code`, `message` and `field` (`nil` when the finding has no field), empty when there is none. The codes are `MEI_ACTIVITY_NOT_ALLOWED`, `ACTIVITY_NOT_REGISTERED` and `MEI_NO_ICMS_ACTIVITY`. The document is issued either way, unless the owner turned on `BlockActivityMismatch` (see Fixing the issuer).
@@ -276,6 +313,7 @@ for _, w := range result["warnings"].([]any) {
 - On NFE, a `RecipientAddress` with `State` `EX` (a buyer abroad) needs `CountryCode` instead of `ZipCode`.
 - `RecipientAddress.Street` and `Neighborhood`, when set, need at least 2 characters after trimming, on either document type.
 - On NFE, every free-text field sent — `ClientName`, each item's `Description`, `Unit`, `PurchaseOrder`, `PurchaseOrderItem` and `Observations`, the `Fuel` group's text fields, every `RecipientAddress` field, `ForeignID` and every `Export` field — is checked for characters the NF-e cannot carry. Anything the NF-e cannot carry (emoji, CJK, Cyrillic…) is refused, and the error names the field and the character. Accented Portuguese and anything else in ISO-8859-1 (latin1) is fine; tabs and line breaks are collapsed into a space, and typographic quotes, dashes, ellipsis, bullet, `€` and `™` are converted by the API (`‘ ’ ‚` to `'`, `“ ” „` to `"`, `– — −` and `•` to `-`, `…` to `...`, `€` to `EUR`, `™` to `TM`). The SDK sends them unchanged. NFSE is not checked.
+- On NFSE, every `Nfse` group, the new `IbsCbs` groups and the new line and recipient fields are checked for the shapes the API fixes (patterns, lengths, enumerations, ranges and decimal places, and the groups that take exactly one of several members); the error names the path. What depends on the company, the service code or the environment is the API's and comes back by name.
 - On NFSE, an item with `TaxRetained: ptr(true)` needs a `RecipientAddress` with `Street`, `Number`, `Neighborhood`, `City`, `State` and `ZipCode` (`CityCode` optional): the ISSQN is retained by the tomador, and the city authorizer refuses the document without their address (`E0237`).
 
 ## Retrying safely
@@ -433,7 +471,7 @@ Only what is set is sent. There is no complement, and the state changes only in
 the dashboard. `MunicipalityName` is derived from the code when left out. The
 municipality code (7 digits), the CEP (8 digits, mask stripped) and the
 `TaxRegime` (1–4), `SimplesNacional` and `SimplesApuracao` (1–3) and
-`SimplesApuracaoIbsCbs` (1 or 3) codes are checked locally. `FiscalFields` are the company owner's alone: anyone else gets an
+`SimplesApuracaoIbsCbs` (1 or 3) codes are checked locally. The `FiscalFields` percentages (two decimals, a comma accepted), `MunicipalRegistration` and `SpecialTaxRegime` are checked locally too, and pointing one at `""` clears it. `FiscalFields` are the company owner's alone: anyone else gets an
 `*APIError` 403. An OAuth credential needs `company:write`
 (`*InsufficientPermissionError` without it). A 503 means the IBGE table could not
 be read: nothing was written, retry after `Retry-After`.
