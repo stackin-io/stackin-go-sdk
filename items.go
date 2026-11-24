@@ -120,8 +120,8 @@ type ItemFields struct {
 	CEST         string `json:"cest,omitempty"`
 	GTIN         string `json:"gtin,omitempty"`
 	ServiceCode  string `json:"service_code,omitempty"`
-	// Nbs is the NBS code of a service, nine digits or dotted.
-	Nbs         string `json:"nbs,omitempty"`
+	// NBS is the NBS code of a service, nine digits or dotted.
+	NBS         string `json:"nbs,omitempty"`
 	ISSRetained *bool  `json:"iss_retained,omitempty"`
 	// NetWeight and GrossWeight are one unit's weight in kg (a product);
 	// pointers so a real 0 can be sent.
@@ -173,7 +173,7 @@ type ItemChanges struct {
 	CEST              *string
 	GTIN              *string
 	ServiceCode       *string
-	Nbs               *string
+	NBS               *string
 	ISSRetained       *bool
 	NetWeight         *float64
 	GrossWeight       *float64
@@ -207,7 +207,7 @@ func (changes ItemChanges) body() (map[string]any, error) {
 		{"cest", changes.CEST},
 		{"gtin", changes.GTIN},
 		{"service_code", changes.ServiceCode},
-		{"nbs", changes.Nbs},
+		{"nbs", changes.NBS},
 		{"ibs_cbs_cst", changes.IbsCbsCST},
 		{"ibs_cbs_class", changes.IbsCbsClass},
 	}

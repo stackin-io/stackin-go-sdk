@@ -228,7 +228,7 @@ inv.Issue(stackin.IssueRequest{ /* ... */
 })
 ```
 
-Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST`, `IbsCbsClass` and `Nbs` (`ItemFields` and `ItemChanges`). Catalog weights are checked for at least 0 and at most 6 decimal places. `ItemChanges.ClearNetWeight` and `ClearGrossWeight` send null to clear a weight.
+Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST`, `IbsCbsClass` and `NBS` (`ItemFields` and `ItemChanges`). Catalog weights are checked for at least 0 and at most 6 decimal places. `ItemChanges.ClearNetWeight` and `ClearGrossWeight` send null to clear a weight.
 
 `Contingency` — NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Left `false`, nothing is sent:
 
@@ -240,13 +240,13 @@ The fiscal rules about these fields — the emission window, which purpose needs
 
 ### NBS code on an NFS-e
 
-`br.Product.Nbs` is the NBS code of the service (cNBS), nine digits or dotted (`1.1502.10.00`). It sits on the line beside `ServiceCode`, NFS-e only, and is left out when empty. The API requires it on a line that carries `IbsCbs` (`422 NBS_REQUIRED`) and refuses an unknown code (`422 NBS_UNKNOWN`); both come back as the ordinary `*APIError`. Catalog items take it too: `ItemFields.Nbs` and `ItemChanges.Nbs` (pointing at `""` clears it).
+`br.Product.NBS` is the NBS code of the service (cNBS), nine digits or dotted (`1.1502.10.00`). It sits on the line beside `ServiceCode`, NFS-e only, and is left out when empty. The API requires it on a line that carries `IbsCbs` (`422 NBS_REQUIRED`) and refuses an unknown code (`422 NBS_UNKNOWN`); both come back as the ordinary `*APIError`. Catalog items take it too: `ItemFields.NBS` and `ItemChanges.NBS` (pointing at `""` clears it).
 
 ```go
 inv.Issue(stackin.IssueRequest{
 	DocumentType: stackin.NFSE,
 	// ...
-	Items: []br.Product{{Description: "Consultoria", UnitPrice: ptr(1500.00), ServiceCode: ptr("17.01"), Nbs: "1.1502.10.00"}},
+	Items: []br.Product{{Description: "Consultoria", UnitPrice: ptr(1500.00), ServiceCode: ptr("17.01"), NBS: "1.1502.10.00"}},
 })
 ```
 

@@ -123,9 +123,9 @@ type Product struct {
 	Fuel                       *Fuel
 
 	ServiceCode *string // LC 116/2003 item.subitem, nfse only
-	// Nbs is the NBS code of the service (cNBS), nine digits or dotted, nfse
+	// NBS is the NBS code of the service (cNBS), nine digits or dotted, nfse
 	// only. Omitted when empty.
-	Nbs             string
+	NBS             string
 	ServiceDiscount *float64 // unconditional discount, nfse only
 	// TaxRetained is a pointer so false can be sent on a line with an ItemID
 	// (turning off a retention the item has). nil is left to the item, or
@@ -213,8 +213,8 @@ func (p Product) ToDict() map[string]any {
 		result["unit_price"] = decimalString(*p.UnitPrice)
 	}
 	setIfNotNil(result, "service_code", p.ServiceCode)
-	if p.Nbs != "" {
-		result["nbs"] = p.Nbs
+	if p.NBS != "" {
+		result["nbs"] = p.NBS
 	}
 	setIfNotNil(result, "discount", p.ServiceDiscount)
 	setIfNotNil(result, "observations", p.Observations)

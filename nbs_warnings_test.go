@@ -9,7 +9,7 @@ import (
 )
 
 func TestProductSendsNbsOnTheItemAndOmitsItWhenEmpty(t *testing.T) {
-	with := br.Product{Description: "Svc", Amount: 10, Nbs: "1.1502.10.00"}.ToDict()
+	with := br.Product{Description: "Svc", Amount: 10, NBS: "1.1502.10.00"}.ToDict()
 	if with["nbs"] != "1.1502.10.00" {
 		t.Errorf("nbs = %v", with["nbs"])
 	}
@@ -24,7 +24,7 @@ func TestProductSendsNbsOnTheItemAndOmitsItWhenEmpty(t *testing.T) {
 func TestIssueSendsNbsOnTheLine(t *testing.T) {
 	url, got := routeServer(t, http.StatusOK, `{"result":{}}`)
 	req := validateRequest()
-	req.Items[0].Nbs = "115021000"
+	req.Items[0].NBS = "115021000"
 	if _, err := NewInvoice(WithBaseURL(url), WithAPIKey("k")).Issue(req); err != nil {
 		t.Fatal(err)
 	}
@@ -36,14 +36,14 @@ func TestIssueSendsNbsOnTheLine(t *testing.T) {
 
 func TestItemFieldsSendNbsAndOmitItWhenEmpty(t *testing.T) {
 	items, seen := newItems(t, http.StatusCreated, map[string]any{"item": map[string]any{}})
-	fields := ItemFields{Kind: "service", Description: "Svc", Nbs: "115021000"}
+	fields := ItemFields{Kind: "service", Description: "Svc", NBS: "115021000"}
 	if _, _, err := items.Upsert(fields); err != nil {
 		t.Fatal(err)
 	}
 	if (*seen)[0].Body["nbs"] != "115021000" {
 		t.Errorf("body = %v", (*seen)[0].Body)
 	}
-	fields.Nbs = ""
+	fields.NBS = ""
 	if _, _, err := items.Upsert(fields); err != nil {
 		t.Fatal(err)
 	}
@@ -54,10 +54,10 @@ func TestItemFieldsSendNbsAndOmitItWhenEmpty(t *testing.T) {
 
 func TestItemChangesSendNbsAndNullToClear(t *testing.T) {
 	items, seen := newItems(t, http.StatusOK, map[string]any{})
-	if _, err := items.Update(itemID, ItemChanges{Nbs: text("1.1502.10.00")}); err != nil {
+	if _, err := items.Update(itemID, ItemChanges{NBS: text("1.1502.10.00")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := items.Update(itemID, ItemChanges{Nbs: text("")}); err != nil {
+	if _, err := items.Update(itemID, ItemChanges{NBS: text("")}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := items.Update(itemID, ItemChanges{}); err != nil {
