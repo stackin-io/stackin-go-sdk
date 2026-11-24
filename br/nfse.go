@@ -452,10 +452,25 @@ func (d OtherDocument) body(path string) (map[string]any, error) {
 	return w.result()
 }
 
+// OtherDfe is a national-repository electronic document that is not an
+// NFS-e, NF-e or CT-e (dFeNacional with tipoChaveDFe 9). Key is the
+// chaveDFe, up to 50 characters, and Description says what the document is.
+type OtherDfe struct {
+	Key         string
+	Description string
+}
+
+func (d OtherDfe) body(path string) (map[string]any, error) {
+	w := newWire(path)
+	w.required("key", d.Key, 1, 50)
+	w.required("description", d.Description, 1, 255)
+	return w.result()
+}
+
 // DeductionDocument is one document behind the deduction (docDedRed, or
 // docAjusteBC in the homologation layout). Set exactly one of NfseKey,
-// NfeKey, CteKey, MunicipalNfse, PaperInvoice, FiscalDocument and
-// OtherDocument. Type is the tpDedRed code: 1 to 9, 99, 101 to 105 or 199.
+// NfeKey, CteKey, MunicipalNfse, PaperInvoice, FiscalDocument,
+// OtherDocument and OtherDfe. Type is the tpDedRed code: 1 to 9, 99, 101 to 105 or 199.
 type DeductionDocument struct {
 	Type           int
 	Description    string
@@ -466,6 +481,7 @@ type DeductionDocument struct {
 	PaperInvoice   *PaperInvoice
 	FiscalDocument *OtherFiscalDocument
 	OtherDocument  *OtherDocument
+	OtherDfe       *OtherDfe
 	IssueDate      time.Time
 	CompetenceDate time.Time
 	TotalAmount    float64
@@ -489,6 +505,7 @@ func (d DeductionDocument) body(path string) (map[string]any, error) {
 		{"paper_invoice", d.PaperInvoice != nil, func(p string) (map[string]any, error) { return d.PaperInvoice.body(p) }},
 		{"fiscal_document", d.FiscalDocument != nil, func(p string) (map[string]any, error) { return d.FiscalDocument.body(p) }},
 		{"other_document", d.OtherDocument != nil, func(p string) (map[string]any, error) { return d.OtherDocument.body(p) }},
+		{"other_dfe", d.OtherDfe != nil, func(p string) (map[string]any, error) { return d.OtherDfe.body(p) }},
 	}
 	identified := presentCount(has(d.NfseKey), has(d.NfeKey), has(d.CteKey))
 	for _, group := range nested {
@@ -499,7 +516,7 @@ func (d DeductionDocument) body(path string) (map[string]any, error) {
 		}
 	}
 	if identified != 1 {
-		w.failWhole("takes exactly one of nfse_key, nfe_key, cte_key, municipal_nfse, paper_invoice, fiscal_document, other_document")
+		w.failWhole("takes exactly one of nfse_key, nfe_key, cte_key, municipal_nfse, paper_invoice, fiscal_document, other_document, other_dfe")
 	}
 	w.requiredDay("issue_date", d.IssueDate)
 	w.day("competence_date", d.CompetenceDate)
@@ -641,6 +658,27 @@ func (i NfseIntermediary) body(path string) (map[string]any, error) {
 	return w.result()
 }
 
+// NfseProvider is the DPS prest contact the issuing company adds: Caepf (14
+// digits), Phone (8 to 15 digits with an optional leading +, masks dropped)
+// and Email, all optional.
+type NfseProvider struct {
+	Caepf string
+	Phone string
+	Email string
+}
+
+func (p NfseProvider) body(path string) (map[string]any, error) {
+	w := newWire(path)
+	w.pattern("caepf", p.Caepf, digits14, "14 digits")
+	if has(p.Phone) {
+		w.pattern("phone", phoneMask.Replace(strings.TrimSpace(p.Phone)), phonePattern, "8 to 15 digits with an optional leading +")
+	}
+	if has(p.Email) {
+		w.pattern("email", p.Email, emailPattern, "an e-mail address")
+	}
+	return w.result()
+}
+
 // ForeignTrade is the comExt group, for a service traded with someone
 // abroad. The coded fields take what the layout lists: ServiceMode 1 to 4,
 // Relationship 0 to 6 or 9 (a pointer so 0, none, can be sent),
@@ -709,6 +747,8 @@ type NfseDetails struct {
 	Construction       *Construction
 	Event              *Event
 	References         *References
+	Provider           *NfseProvider
+	RecipientCaepf     string
 	Intermediary       *NfseIntermediary
 	ForeignTrade       *ForeignTrade
 }
@@ -726,6 +766,7 @@ func (d NfseDetails) ToDict() (map[string]any, error) {
 	if strings.TrimSpace(d.ServiceCountryCode) == "BR" {
 		w.fail("service_country_code", "is for a service performed abroad and cannot be BR")
 	}
+	w.pattern("recipient_caepf", d.RecipientCaepf, digits14, "14 digits")
 	groups := []struct {
 		key  string
 		set  bool
@@ -739,6 +780,7 @@ func (d NfseDetails) ToDict() (map[string]any, error) {
 		{"construction", d.Construction != nil, func(p string) (map[string]any, error) { return d.Construction.body(p) }},
 		{"event", d.Event != nil, func(p string) (map[string]any, error) { return d.Event.body(p) }},
 		{"references", d.References != nil, func(p string) (map[string]any, error) { return d.References.body(p) }},
+		{"provider", d.Provider != nil, func(p string) (map[string]any, error) { return d.Provider.body(p) }},
 		{"intermediary", d.Intermediary != nil, func(p string) (map[string]any, error) { return d.Intermediary.body(p) }},
 		{"foreign_trade", d.ForeignTrade != nil, func(p string) (map[string]any, error) { return d.ForeignTrade.body(p) }},
 	}

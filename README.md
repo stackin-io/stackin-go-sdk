@@ -266,7 +266,7 @@ All optional, NFS-e only (the API refuses them on an NF-e), and left out of the 
 
 - On a line (`br.Product`): `NBS`, `ConditionalDiscount` (BRL, above 0), `MunicipalServiceCode` (3 digits; refused for an MEI) and `InternalCode` (up to 20 letters or digits). `IbsCbs` also takes `PersonalUse`, `Government`, `ReferencedNfse`, `Recipient`, `RealEstate`, `MovableGoods`, `RegularTaxation`, `Deferral` and `PresumedCredit`.
 - On the request: `RecipientMunicipalRegistration` (up to 15 letters or digits, masks dropped), `ForeignIDMissingReason` (1 or 2) and, on `RecipientAddress`, `Complement` and, for a tomador abroad, `CountryISO2`, `PostalCode` and `Province`.
-- `IssueRequest.Nfse` (`*br.NfseDetails`): `ApproximateTaxes`, `CompetenceDate`, `ServiceCityCode` or `ServiceCountryCode`, `Iss`, `Federal`, `Deductions`, `Substitution`, `Construction`, `Event`, `References`, `Intermediary` and `ForeignTrade`.
+- `IssueRequest.Nfse` (`*br.NfseDetails`): `ApproximateTaxes`, `CompetenceDate`, `ServiceCityCode` or `ServiceCountryCode`, `Iss`, `Federal`, `Deductions`, `Substitution`, `Construction`, `Event`, `References`, `Provider` (`NfseProvider`: `Caepf` of 14 digits, `Phone`, `Email`), `RecipientCaepf` (14 digits), `Intermediary` and `ForeignTrade`. A deduction document also takes `OtherDfe` (`Key` up to 50 characters, `Description`) as one of its identifications; the API reads it on the homologation layout only.
 
 ```go
 inv.Issue(stackin.IssueRequest{

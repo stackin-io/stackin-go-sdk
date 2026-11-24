@@ -59,10 +59,12 @@ func TestNfseGroupsGoOutAsSnakeCaseWithDecimalStrings(t *testing.T) {
 			TotalAmount:    50,
 			DeductedAmount: 20.5,
 		}}},
-		Substitution: &br.Substitution{AccessKey: key, ReasonCode: "5"},
-		Construction: &br.Construction{WorkIDType: "cib", WorkID: "12345678"},
-		Event:        &br.Event{Name: "Show", StartDate: day(2026, time.November, 2), EndDate: day(2026, time.November, 3), EventID: "EV1"},
-		References:   &br.References{OrderNumber: "PO-1", OrderItems: []string{"a", "b"}},
+		Substitution:   &br.Substitution{AccessKey: key, ReasonCode: "5"},
+		Construction:   &br.Construction{WorkIDType: "cib", WorkID: "12345678"},
+		Event:          &br.Event{Name: "Show", StartDate: day(2026, time.November, 2), EndDate: day(2026, time.November, 3), EventID: "EV1"},
+		References:     &br.References{OrderNumber: "PO-1", OrderItems: []string{"a", "b"}},
+		Provider:       &br.NfseProvider{Caepf: "12345678901234", Phone: "+55 (11) 99999-0000", Email: "dps@example.com"},
+		RecipientCaepf: "43210987654321",
 		Intermediary: &br.NfseIntermediary{
 			ForeignID: "NIF1",
 			Name:      "Broker",
@@ -96,10 +98,12 @@ func TestNfseGroupsGoOutAsSnakeCaseWithDecimalStrings(t *testing.T) {
 			"type": float64(2), "nfse_key": key, "issue_date": "2026-11-01",
 			"total_amount": "50", "deducted_amount": "20.5",
 		}}},
-		"substitution": map[string]any{"access_key": key, "reason_code": "05"},
-		"construction": map[string]any{"work_id_type": "cib", "work_id": "12345678"},
-		"event":        map[string]any{"name": "Show", "start_date": "2026-11-02", "end_date": "2026-11-03", "event_id": "EV1"},
-		"references":   map[string]any{"order_number": "PO-1", "order_items": []any{"a", "b"}},
+		"substitution":    map[string]any{"access_key": key, "reason_code": "05"},
+		"construction":    map[string]any{"work_id_type": "cib", "work_id": "12345678"},
+		"event":           map[string]any{"name": "Show", "start_date": "2026-11-02", "end_date": "2026-11-03", "event_id": "EV1"},
+		"references":      map[string]any{"order_number": "PO-1", "order_items": []any{"a", "b"}},
+		"provider":        map[string]any{"caepf": "12345678901234", "phone": "+5511999990000", "email": "dps@example.com"},
+		"recipient_caepf": "43210987654321",
 		"intermediary": map[string]any{
 			"foreign_id": "NIF1",
 			"name":       "Broker",
@@ -276,6 +280,30 @@ func TestNfseRefusalsNeverReachTheNetwork(t *testing.T) {
 		"substitution reason code": {
 			br.NfseDetails{Substitution: &br.Substitution{AccessKey: key, ReasonCode: "07"}},
 			"reason_code must be one of",
+		},
+		"provider caepf": {
+			br.NfseDetails{Provider: &br.NfseProvider{Caepf: "123"}},
+			"caepf must be 14 digits",
+		},
+		"provider phone": {
+			br.NfseDetails{Provider: &br.NfseProvider{Phone: "12"}},
+			"phone must be 8 to 15 digits",
+		},
+		"provider email": {
+			br.NfseDetails{Provider: &br.NfseProvider{Email: "nope"}},
+			"email must be an e-mail address",
+		},
+		"recipient caepf": {
+			br.NfseDetails{RecipientCaepf: "1234"},
+			"recipient_caepf must be 14 digits",
+		},
+		"other dfe without description": {
+			br.NfseDetails{Deductions: &br.Deductions{Documents: []br.DeductionDocument{{Type: 99, Description: "x", OtherDfe: &br.OtherDfe{Key: "K"}, IssueDate: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), TotalAmount: 5, DeductedAmount: 5}}}},
+			"description is required",
+		},
+		"other dfe and nfse key": {
+			br.NfseDetails{Deductions: &br.Deductions{Documents: []br.DeductionDocument{{Type: 2, NfseKey: key, OtherDfe: &br.OtherDfe{Key: "K", Description: "D"}, IssueDate: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), TotalAmount: 5, DeductedAmount: 5}}}},
+			"exactly one of nfse_key",
 		},
 		"intermediary two ids": {
 			br.NfseDetails{Intermediary: &br.NfseIntermediary{TaxID: "12345678909", ForeignID: "N", Name: "I", Address: &abroad}},
@@ -602,5 +630,25 @@ func TestNBSSuggestionsRefusesUnusableCodes(t *testing.T) {
 		if _, err := client.NBSSuggestions(code); !errors.As(err, &invErr) {
 			t.Errorf("code %q: err = %v", code, err)
 		}
+	}
+}
+
+func TestNfseDeductionOtherDfeIsSent(t *testing.T) {
+	raw, _, err := captureIssue(t, nfseRequest(&br.NfseDetails{Deductions: &br.Deductions{Documents: []br.DeductionDocument{{
+		Type:           99,
+		Description:    "outros",
+		OtherDfe:       &br.OtherDfe{Key: "ABC123", Description: "Fatura de energia"},
+		IssueDate:      day(2026, time.November, 1),
+		TotalAmount:    50,
+		DeductedAmount: 20,
+	}}}}))
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	documents := sentFields(t, raw)["nfse"].(map[string]any)["deductions"].(map[string]any)["documents"].([]any)
+	got := documents[0].(map[string]any)["other_dfe"]
+	want := map[string]any{"key": "ABC123", "description": "Fatura de energia"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("other_dfe = %#v, want %#v", got, want)
 	}
 }
