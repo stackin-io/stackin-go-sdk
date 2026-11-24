@@ -230,3 +230,58 @@ func decodeRows(raw []byte) ([]map[string]any, error) {
 	}
 	return parsed, nil
 }
+
+// NBSSuggestion is one row of NFS-e Anexo VIII for a service code: an NBS
+// with the cIndOp and cClassTrib the annex pairs with it. Description,
+// OperationIndicator, IbsCbsClassification and ClassificationName are nil
+// when the annex lists none.
+type NBSSuggestion struct {
+	NBS                  string  `json:"nbs"`
+	Description          *string `json:"description"`
+	OperationIndicator   *string `json:"operation_indicator"`
+	IbsCbsClassification *string `json:"ibs_cbs_classification"`
+	ClassificationName   *string `json:"classification_name"`
+}
+
+// ReferenceSource is the official file the reference rows were loaded from.
+type ReferenceSource struct {
+	Path string  `json:"path"`
+	Date *string `json:"date"`
+}
+
+// NBSSuggestions is what the NBS route answers: ServiceCode is the
+// six-digit cTribNac and Suggestions every NBS, cIndOp and cClassTrib
+// combination the annex lists for its subitem, empty when it lists none.
+type NBSSuggestions struct {
+	ServiceCode string          `json:"service_code"`
+	Suggestions []NBSSuggestion `json:"suggestions"`
+	Source      ReferenceSource `json:"source"`
+}
+
+// NBSSuggestions suggests the NBS codes Anexo VIII correlates with a
+// service code, in any form Product.ServiceCode takes: "1.07", "01.07.00"
+// or "010700". Only its LC 116 subitem decides the answer. Nothing here is
+// written into a document: send a suggestion as Product.NBS and its
+// OperationIndicator and IbsCbsClassification on Product.IbsCbs. A code the
+// route cannot read is an *APIError 422.
+func (r *FiscalReference) NBSSuggestions(serviceCode string) (*NBSSuggestions, error) {
+	if len([]rune(serviceCode)) > 12 {
+		return nil, &InvoiceError{Message: "service_code must be at most 12 characters"}
+	}
+	code, err := segment(serviceCode)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := r.send("GET", "/service-codes/"+code+"/nbs", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	var parsed NBSSuggestions
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, &InvoiceError{Message: "unexpected response shape: " + err.Error()}
+	}
+	if parsed.Suggestions == nil {
+		parsed.Suggestions = []NBSSuggestion{}
+	}
+	return &parsed, nil
+}
