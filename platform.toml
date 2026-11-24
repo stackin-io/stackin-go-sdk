@@ -2,6 +2,7 @@
 name = "stackin-go-sdk"
 type = "library"
 language = "go"
+ci = "github"
 
 [source_host]
 kind = "github"
@@ -10,3 +11,17 @@ repo = "stackin-io/stackin-go-sdk"
 [release]
 strategy = "semver"
 changelog = "conventional"
+
+[[scopes]]
+name = "prod"
+kind = "library"
+criticality = "high"
+
+[[deploy.targets]]
+name = "go"
+kind = "go"
+run_by = "github_actions"
+observe = true
+workflow = "go-release.yml"
+stages = ["prod"]
+module = "github.com/stackin-io/stackin-go-sdk"
