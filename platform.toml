@@ -21,7 +21,6 @@ criticality = "high"
 name = "go"
 kind = "go"
 run_by = "github_actions"
-observe = true
 workflow = "go-release.yml"
 stages = ["prod"]
 module = "github.com/stackin-io/stackin-go-sdk"

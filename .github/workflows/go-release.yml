@@ -18,12 +18,14 @@ name: 📦 Release MOD
 # file is a record of the last release, not of the tagged tree.
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Tag to verify, e.g. v0.2.0
+      version:
+        description: The release to publish, without the v prefix
+        required: true
+        type: string
+      registry:
+        description: go
         required: true
         type: string
 
@@ -44,7 +46,7 @@ jobs:
       - name: 🔍 Extract version from tag
         id: version
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          TAG="v${{ inputs.version }}"
 
           if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::The Go proxy needs a semver tag prefixed with v, got $TAG."
@@ -104,7 +106,7 @@ jobs:
 
       - name: 🔥 Ask the proxy for this version
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          TAG="v${{ inputs.version }}"
           MODULE="$(head -1 go.mod | cut -d' ' -f2)"
           echo "fetching $MODULE@$TAG"
 
@@ -123,7 +125,7 @@ jobs:
       - name: 📋 Summary
         if: always()
         run: |
-          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          TAG="v${{ inputs.version }}"
           echo "### Released $TAG" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
