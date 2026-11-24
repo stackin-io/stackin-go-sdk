@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.26.0 — 2026-11-24
+
+### Features
+- **company:** add BlockActivityMismatch to CompanyUpdate
+- **invoice:** add warnings to the issue result and AcceptLanguage to issue and validate
+- **items:** send nbs on NFS-e lines and catalog items
+
+### Refactoring
+- **items:** rename Nbs to NBS to match NCM and CFOP
+
+### Docs
+- **readme:** document nbs, warnings, AcceptLanguage and BlockActivityMismatch
+
+### Tests
+- cover nbs, issue warnings, accept-language and block_activity_mismatch
+
+### Style
+- drop explanatory comments from the new fields
+
 ## v0.25.0 — 2026-11-23
 
 ### Features
