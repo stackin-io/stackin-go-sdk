@@ -23,6 +23,7 @@ type ValidationFinding struct {
 type ValidationWarning struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Field   string `json:"field"`
 }
 
 // ValidationResult is what Validate answers. Valid is false when Errors is
@@ -44,7 +45,8 @@ func (inv *Invoice) Validate(req IssueRequest) (*ValidationResult, error) {
 		return nil, err
 	}
 
-	raw, err := inv.send(http.MethodPost, "/invoices/validate", payload, nil)
+	raw, err := inv.send(http.MethodPost, "/invoices/validate", payload, nil,
+		withAcceptLanguage(req.AcceptLanguage))
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnprocessableEntity {
