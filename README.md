@@ -228,7 +228,7 @@ inv.Issue(stackin.IssueRequest{ /* ... */
 })
 ```
 
-Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST` and `IbsCbsClass` (`ItemFields` and `ItemChanges`). Catalog weights are checked for at least 0 and at most 6 decimal places. `ItemChanges.ClearNetWeight` and `ClearGrossWeight` send null to clear a weight.
+Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST`, `IbsCbsClass` and `Nbs` (`ItemFields` and `ItemChanges`). Catalog weights are checked for at least 0 and at most 6 decimal places. `ItemChanges.ClearNetWeight` and `ClearGrossWeight` send null to clear a weight.
 
 `Contingency` — NF-e only: `true` sends the document through the UF's contingency authorizer (SVC-AN or SVC-RS, `tpEmis` 6/7) for when its own is down. Left `false`, nothing is sent:
 
@@ -237,6 +237,31 @@ inv.Issue(stackin.IssueRequest{ /* ... */ Contingency: true})
 ```
 
 The fiscal rules about these fields — the emission window, which purpose needs a referenced key, an export group on a note to Brazil — are the API's, and it answers them by name.
+
+### NBS code on an NFS-e
+
+`br.Product.Nbs` is the NBS code of the service (cNBS), nine digits or dotted (`1.1502.10.00`). It sits on the line beside `ServiceCode`, NFS-e only, and is left out when empty. The API requires it on a line that carries `IbsCbs` (`422 NBS_REQUIRED`) and refuses an unknown code (`422 NBS_UNKNOWN`); both come back as the ordinary `*APIError`. Catalog items take it too: `ItemFields.Nbs` and `ItemChanges.Nbs` (pointing at `""` clears it).
+
+```go
+inv.Issue(stackin.IssueRequest{
+	DocumentType: stackin.NFSE,
+	// ...
+	Items: []br.Product{{Description: "Consultoria", UnitPrice: ptr(1500.00), ServiceCode: ptr("17.01"), Nbs: "1.1502.10.00"}},
+})
+```
+
+### Activity warnings on issue
+
+`Issue` returns the same result map as before with a `warnings` key added: always present, a `[]any` of `map[string]any` with `code`, `message` and `field` (`nil` when the finding has no field), empty when there is none. The codes are `MEI_ACTIVITY_NOT_ALLOWED`, `ACTIVITY_NOT_REGISTERED` and `MEI_NO_ICMS_ACTIVITY`. The document is issued either way, unless the owner turned on `BlockActivityMismatch` (see Fixing the issuer).
+
+```go
+result, err := inv.Issue(req)
+for _, w := range result["warnings"].([]any) {
+	fmt.Println(w.(map[string]any)["code"])
+}
+```
+
+`IssueRequest.AcceptLanguage` (`pt-BR`, `en` or `es`; the API falls back to English) localizes the warning messages of `Issue` and `Validate`. It is sent as the `Accept-Language` header only, never in the body, and omitted when empty.
 
 ### Checked before the request goes out
 
@@ -412,6 +437,13 @@ municipality code (7 digits), the CEP (8 digits, mask stripped) and the
 `*APIError` 403. An OAuth credential needs `company:write`
 (`*InsufficientPermissionError` without it). A 503 means the IBGE table could not
 be read: nothing was written, retry after `Retry-After`.
+
+`CompanyUpdate.BlockActivityMismatch` (`*bool`, owner only, anyone else gets an `*APIError` 403) makes the API refuse an issuance with `MEI_ACTIVITY_NOT_ALLOWED` or `ACTIVITY_NOT_REGISTERED` as a 422 instead of a warning. It is sent only when set, so `ptr(false)` turns it off:
+
+```go
+block := true
+company.Update(stackin.CompanyUpdate{BlockActivityMismatch: &block})
+```
 
 ## Suggesting a classification
 
@@ -724,7 +756,7 @@ if !result.Valid {
     }
 }
 for _, w := range result.Warnings {
-    fmt.Println(w.Code, w.Message)
+    fmt.Println(w.Code, w.Field, w.Message)
 }
 ```
 
