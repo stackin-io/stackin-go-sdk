@@ -147,9 +147,6 @@ type IssueRequest struct {
 	// which two requests are meant to be the same one.
 	IdempotencyKey string
 
-	// AcceptLanguage (pt-BR, en or es) localizes the message of the
-	// warnings Issue and Validate answer. Sent as the Accept-Language
-	// header only, never in the body; the header is omitted when empty.
 	AcceptLanguage string `json:"-"`
 
 	// Discount is a discount on the whole document, in BRL, zero or more.

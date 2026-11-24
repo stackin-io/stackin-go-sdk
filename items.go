@@ -120,9 +120,8 @@ type ItemFields struct {
 	CEST         string `json:"cest,omitempty"`
 	GTIN         string `json:"gtin,omitempty"`
 	ServiceCode  string `json:"service_code,omitempty"`
-	// NBS is the NBS code of a service, nine digits or dotted.
-	NBS         string `json:"nbs,omitempty"`
-	ISSRetained *bool  `json:"iss_retained,omitempty"`
+	NBS          string `json:"nbs,omitempty"`
+	ISSRetained  *bool  `json:"iss_retained,omitempty"`
 	// NetWeight and GrossWeight are one unit's weight in kg (a product);
 	// pointers so a real 0 can be sent.
 	NetWeight   *float64 `json:"net_weight,omitempty"`

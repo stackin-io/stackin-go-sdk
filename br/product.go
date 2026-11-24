@@ -122,9 +122,7 @@ type Product struct {
 	IbsCbs                     *IbsCbs
 	Fuel                       *Fuel
 
-	ServiceCode *string // LC 116/2003 item.subitem, nfse only
-	// NBS is the NBS code of the service (cNBS), nine digits or dotted, nfse
-	// only. Omitted when empty.
+	ServiceCode     *string // LC 116/2003 item.subitem, nfse only
 	NBS             string
 	ServiceDiscount *float64 // unconditional discount, nfse only
 	// TaxRetained is a pointer so false can be sent on a line with an ItemID
