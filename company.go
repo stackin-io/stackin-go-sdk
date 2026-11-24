@@ -1,9 +1,16 @@
 package stackin
 
 import (
+	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/stackin-io/stackin-go-sdk/br"
 )
+
+var specialTaxRegimes = map[string]bool{"0": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "9": true}
 
 // Company fixes the issuer itself: its address and, for the owner, its
 // fiscal fields (PATCH /company). It fixes what Invoice.Readiness reports
@@ -72,6 +79,23 @@ type FiscalFields struct {
 	StateRegistration string `json:"state_registration,omitempty"`
 	// ServiceCode is the default cTribNac, e.g. 1.07 or 01.07.00.
 	ServiceCode string `json:"service_code,omitempty"`
+
+	// The fields below are pointers: nil leaves the setting alone and a
+	// pointer to "" clears it.
+	//
+	// The ApproximateTax* settings are the Lei 12.741 percentages (DPS
+	// totTrib), two decimals: the Simples one 0 to 99.99, the others 0 to
+	// 100. IssRate is the ISSQN rate in percent, above 0 and at most 5.
+	// MunicipalRegistration is the provider's inscrição municipal, up to 15
+	// letters or digits. SpecialTaxRegime is regEspTrib: 0, 1, 2, 3, 4, 5, 6
+	// or 9.
+	ApproximateTaxSimplesPercent   *string `json:"approximate_tax_simples_percent,omitempty"`
+	ApproximateTaxFederalPercent   *string `json:"approximate_tax_federal_percent,omitempty"`
+	ApproximateTaxStatePercent     *string `json:"approximate_tax_state_percent,omitempty"`
+	ApproximateTaxMunicipalPercent *string `json:"approximate_tax_municipal_percent,omitempty"`
+	IssRate                        *string `json:"iss_rate,omitempty"`
+	MunicipalRegistration          *string `json:"municipal_registration,omitempty"`
+	SpecialTaxRegime               *string `json:"special_tax_regime,omitempty"`
 }
 
 // Update fixes the issuer's address and, for the owner, its fiscal
@@ -152,7 +176,61 @@ func (f *FiscalFields) body() (map[string]string, error) {
 	}
 	put(out, "state_registration", f.StateRegistration)
 	put(out, "service_code", f.ServiceCode)
+	settings := []struct {
+		key    string
+		value  *string
+		lo, hi float64
+		loOpen bool
+	}{
+		{"approximate_tax_simples_percent", f.ApproximateTaxSimplesPercent, 0, 99.99, false},
+		{"approximate_tax_federal_percent", f.ApproximateTaxFederalPercent, 0, 100, false},
+		{"approximate_tax_state_percent", f.ApproximateTaxStatePercent, 0, 100, false},
+		{"approximate_tax_municipal_percent", f.ApproximateTaxMunicipalPercent, 0, 100, false},
+		{"iss_rate", f.IssRate, 0, 5, true},
+	}
+	for _, setting := range settings {
+		if setting.value == nil {
+			continue
+		}
+		text, err := percentSetting(setting.key, *setting.value, setting.lo, setting.hi, setting.loOpen)
+		if err != nil {
+			return nil, err
+		}
+		out[setting.key] = text
+	}
+	if f.MunicipalRegistration != nil {
+		text := unmaskedRegistration(*f.MunicipalRegistration)
+		if text != "" && !registrationPattern.MatchString(text) {
+			return nil, &InvoiceError{Message: "municipal_registration takes up to 15 letters or digits"}
+		}
+		out["municipal_registration"] = text
+	}
+	if f.SpecialTaxRegime != nil {
+		regime := strings.TrimSpace(*f.SpecialTaxRegime)
+		if regime != "" && !specialTaxRegimes[regime] {
+			return nil, &InvoiceError{Message: "special_tax_regime must be one of 0, 1, 2, 3, 4, 5, 6, 9"}
+		}
+		out["special_tax_regime"] = regime
+	}
 	return out, nil
+}
+
+func percentSetting(key, value string, lo, hi float64, loOpen bool) (string, error) {
+	text := strings.ReplaceAll(strings.TrimSpace(value), ",", ".")
+	if text == "" {
+		return "", nil
+	}
+	number, err := strconv.ParseFloat(text, 64)
+	span := fmt.Sprintf("from %s to %s", br.DecimalString(lo), br.DecimalString(hi))
+	if loOpen {
+		span = fmt.Sprintf("above %s and at most %s", br.DecimalString(lo), br.DecimalString(hi))
+	}
+	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) || number < lo || number > hi ||
+		(loOpen && number == lo) || decimalPlaces(number) > 2 {
+		return "", &InvoiceError{Message: fmt.Sprintf(
+			"%s must be a percentage %s with at most two decimals; got %q", key, span, value)}
+	}
+	return br.DecimalString(number), nil
 }
 
 func put(out map[string]string, key, value string) {
