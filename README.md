@@ -236,6 +236,17 @@ Catalog items take `NetWeight`, `GrossWeight`, `IbsCbsCST`, `IbsCbsClass` and `N
 inv.Issue(stackin.IssueRequest{ /* ... */ Contingency: true})
 ```
 
+With `Contingency` it also takes `ContingencyStartedAt` (a `*time.Time`, sent as RFC 3339 in its own offset and written as `dhCont`; defaults to the emission moment, and may not be later than it) and `ContingencyReason` (15 to 256 characters, written as `xJust`; the API has a default reason). Both are left out when unset, and the API refuses either one without `Contingency`:
+
+```go
+startedAt := time.Date(2026, 11, 25, 9, 0, 0, 0, time.FixedZone("BRT", -3*60*60))
+inv.Issue(stackin.IssueRequest{ /* ... */
+	Contingency:          true,
+	ContingencyStartedAt: &startedAt,
+	ContingencyReason:    "SEFAZ authorizer unavailable since 09:00",
+})
+```
+
 The fiscal rules about these fields — the emission window, which purpose needs a referenced key, an export group on a note to Brazil — are the API's, and it answers them by name.
 
 ### NBS code on an NFS-e
@@ -250,13 +261,17 @@ inv.Issue(stackin.IssueRequest{
 })
 ```
 
-`FiscalReference.NBSSuggestions` (`GET /service-codes/{service_code}/nbs`) lists the NBS codes NFS-e Anexo VIII pairs with a service code, in any form `ServiceCode` takes (`1.07`, `01.07.00`, `010700`). Each row also carries the `OperationIndicator` (cIndOp) and `IbsCbsClassification` (cClassTrib) the annex pairs with that NBS. They are suggestions only: nothing is written into a document unless you send them as `Product.NBS` and on `Product.IbsCbs`. A code the route cannot read is an `*APIError` 422.
+`FiscalReference.NBSSuggestions` (`GET /service-codes/{service_code}/nbs`) lists the NBS codes NFS-e Anexo VIII pairs with a service code, in any form `ServiceCode` takes (`1.07`, `01.07.00`, `010700`). Each row also carries the `OperationIndicator` (cIndOp) and `IbsCbsClassification` (cClassTrib) the annex pairs with that NBS. When the official cClassTrib table has them, a row also carries `ClassificationCST` (for `IbsCbs.CST`), `ReductionIBS` and `ReductionCBS` (percent reductions, `*float64`), `LegalReference` (the LC 214/2025 article), `Incidence` (where Anexo VIII says the IBS is due) and `OperationVariants`, the cIndOp for the same operation when it is not onerous or the acquirer is abroad, keyed `onerous_domestic`, `onerous_abroad`, `free_domestic` and `free_abroad`; each is `nil` when the table gives none. They are suggestions only: nothing is written into a document unless you send them as `Product.NBS` and on `Product.IbsCbs`. A code the route cannot read is an `*APIError` 422.
 
 ```go
 reference := stackin.NewFiscalReference(stackin.WithAPIKey(os.Getenv("STACKIN_API_KEY")))
 found, err := reference.NBSSuggestions("1.07")
 for _, row := range found.Suggestions {
 	fmt.Println(row.NBS, *row.OperationIndicator, *row.IbsCbsClassification)
+	if row.ClassificationCST != nil && row.ReductionIBS != nil {
+		fmt.Println(*row.ClassificationCST, *row.ReductionIBS)
+	}
+	fmt.Println(row.OperationVariants["free_abroad"])
 }
 ```
 
@@ -501,6 +516,11 @@ confirm it, and only then put it on an item. `missing_information` lists what
 would settle it; answer through `Answers` and ask again. `Description` is 3 to
 500 characters, checked locally.
 
+`Answers` takes `origin` — `"resale"` or `"own_production"` — to settle an NF-e's CFOP: a
+resold product is `x102`, the company's own production `x101`. When the description does
+not say which, `missing_information` asks for it. `ClassifyRequest.AcceptLanguage`
+(`pt-BR`, `en` or `es`) is sent as the `Accept-Language` header only.
+
 ## Documents issued against you
 
 Everything above serves the **issuer**. These two serve the **recipient**: what
@@ -516,6 +536,17 @@ The first 50 received documents a month are included in every plan; each one
 after that takes R$ 0,05 from the account credit. Some existing accounts are
 exempt, and `Usage().ReceivedFree` says whether this one is.
 
+Besides `data`, the page carries a `sync` object that says how fresh the list is:
+
+| Field | Meaning |
+|---|---|
+| `status` | `ok` (the last read worked), `cooling_down` (the SEFAZ asked for a wait), `failing` (reads keep failing) or `never` (nothing read yet: no certificate, or the first sweep is pending) |
+| `next_sync_at` | no read is allowed before this instant (UTC) |
+| `competing_reader` | `true` when the SEFAZ blocks the reads because another system reads the same CNPJ with the same certificate |
+| `hint` | the usual cause and what to do, in the language of `WithAcceptLanguage` (`pt-BR`, `en` or `es`) |
+
+`Received()` takes `WithAcceptLanguage` for the `hint`; `last_synced_at`, `failing_since`, `error_code`, `error_message` and `gaps_pending` come in the same object.
+
 ```go
 sync, err := client.SyncReceived()
 var limited *stackin.RateLimitedError
@@ -527,11 +558,11 @@ if errors.As(err, &limited) {
     fmt.Println(sync.Stored, "new documents")
 }
 
-page, err := client.Received(20, 0)
+page, err := client.Received(20, 0, stackin.WithAcceptLanguage("en"))
 if err != nil {
     log.Fatal(err)
 }
-fmt.Println(page["total"])
+fmt.Println(page["total"], page["sync"])
 
 if _, err := client.Manifest(accessKey, stackin.Ciencia, ""); err != nil {
     log.Fatal(err)
