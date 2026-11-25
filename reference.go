@@ -234,13 +234,25 @@ func decodeRows(raw []byte) ([]map[string]any, error) {
 // NBSSuggestion is one row of NFS-e Anexo VIII for a service code: an NBS
 // with the cIndOp and cClassTrib the annex pairs with it. Description,
 // OperationIndicator, IbsCbsClassification and ClassificationName are nil
-// when the annex lists none.
+// when the annex lists none, and so are the fields of the official
+// cClassTrib table: ClassificationCST (for ibs_cbs.cst), ReductionIBS and
+// ReductionCBS (percent reductions), LegalReference (the LC 214/2025
+// article) and Incidence (where Anexo VIII says the IBS is due).
+// OperationVariants holds the cIndOp for the same operation when it is not
+// onerous or the acquirer is abroad, keyed onerous_domestic,
+// onerous_abroad, free_domestic and free_abroad.
 type NBSSuggestion struct {
-	NBS                  string  `json:"nbs"`
-	Description          *string `json:"description"`
-	OperationIndicator   *string `json:"operation_indicator"`
-	IbsCbsClassification *string `json:"ibs_cbs_classification"`
-	ClassificationName   *string `json:"classification_name"`
+	NBS                  string            `json:"nbs"`
+	Description          *string           `json:"description"`
+	OperationIndicator   *string           `json:"operation_indicator"`
+	IbsCbsClassification *string           `json:"ibs_cbs_classification"`
+	ClassificationName   *string           `json:"classification_name"`
+	ClassificationCST    *string           `json:"classification_cst"`
+	ReductionIBS         *float64          `json:"reduction_ibs"`
+	ReductionCBS         *float64          `json:"reduction_cbs"`
+	LegalReference       *string           `json:"legal_reference"`
+	Incidence            *string           `json:"incidence"`
+	OperationVariants    map[string]string `json:"operation_variants"`
 }
 
 // ReferenceSource is the official file the reference rows were loaded from.

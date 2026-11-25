@@ -212,6 +212,17 @@ type IssueRequest struct {
 	// when true.
 	Contingency bool
 
+	// ContingencyStartedAt is when the issuer entered contingency (dhCont),
+	// sent as RFC 3339 in the offset of its own Location. Only with
+	// Contingency; the API defaults it to the emission moment and refuses
+	// one later than it. Omitted when nil.
+	ContingencyStartedAt *time.Time
+
+	// ContingencyReason is why the issuer entered contingency (xJust), 15 to
+	// 256 characters. Only with Contingency; the API has a default. Omitted
+	// when empty.
+	ContingencyReason string
+
 	// UpdateClient rewrites an existing client with this request's
 	// recipient data after a successful issuance; a new recipient is
 	// saved as a client either way. Sent only when true.
@@ -261,7 +272,9 @@ type requestConfig struct {
 	acceptLanguage string
 }
 
-func withAcceptLanguage(language string) RequestOption {
+// WithAcceptLanguage sets the Accept-Language header of one call: pt-BR, en
+// or es. It localizes the messages the API writes, and never reaches the body.
+func WithAcceptLanguage(language string) RequestOption {
 	return func(cfg *requestConfig) { cfg.acceptLanguage = language }
 }
 
@@ -441,6 +454,9 @@ func validateIssueFields(req IssueRequest) error {
 	if req.IssuedAt != nil && req.IssuedAt.IsZero() {
 		return &InvoiceError{Message: "issued_at must be a date-time, not the zero time"}
 	}
+	if req.ContingencyStartedAt != nil && req.ContingencyStartedAt.IsZero() {
+		return &InvoiceError{Message: "contingency_started_at must be a date-time, not the zero time"}
+	}
 	switch req.Purpose {
 	case "", PurposeNormal, PurposeComplementary, PurposeAdjustment, PurposeReturn:
 	default:
@@ -467,7 +483,7 @@ func (inv *Invoice) Issue(req IssueRequest) (map[string]any, error) {
 	}
 	raw, err := inv.send(http.MethodPost, "/invoices", payload, nil,
 		WithIdempotencyKey(req.IdempotencyKey),
-		withAcceptLanguage(req.AcceptLanguage))
+		WithAcceptLanguage(req.AcceptLanguage))
 	if err != nil {
 		return nil, err
 	}
@@ -633,6 +649,12 @@ func buildIssuePayload(req IssueRequest) (map[string]any, error) {
 	if req.Contingency {
 		payload["contingency"] = true
 	}
+	if req.ContingencyStartedAt != nil {
+		payload["contingency_started_at"] = req.ContingencyStartedAt.Format(time.RFC3339)
+	}
+	if req.ContingencyReason != "" {
+		payload["contingency_reason"] = req.ContingencyReason
+	}
 	if req.RecipientMunicipalRegistration != "" {
 		payload["recipient_municipal_registration"] = unmaskedRegistration(req.RecipientMunicipalRegistration)
 	}
@@ -757,7 +779,11 @@ func (e *InvoiceError) Error() string {
 // The first 50 received documents a month are included in every plan; each
 // one after that takes R$ 0,05 from the account credit. Some accounts are
 // exempt: Usage().ReceivedFree tells.
-func (inv *Invoice) Received(limit, offset int) (map[string]any, error) {
+//
+// The page carries a sync object: status (ok, cooling_down, failing or
+// never), next_sync_at, competing_reader and a hint, which
+// WithAcceptLanguage (pt-BR, en or es) localizes.
+func (inv *Invoice) Received(limit, offset int, opts ...RequestOption) (map[string]any, error) {
 	params := url.Values{}
 	if limit > 0 {
 		params.Set("limit", strconv.Itoa(limit))
@@ -765,7 +791,7 @@ func (inv *Invoice) Received(limit, offset int) (map[string]any, error) {
 	if offset > 0 {
 		params.Set("offset", strconv.Itoa(offset))
 	}
-	return inv.request(http.MethodGet, "/received-invoices", nil, params)
+	return inv.request(http.MethodGet, "/received-invoices", nil, params, opts...)
 }
 
 // HistoryQuery filters the issuance history. Every field is optional; the

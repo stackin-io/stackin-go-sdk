@@ -65,9 +65,14 @@ type ClassifyRequest struct {
 	// RecipientState is the buyer's UF, two letters. Omitted when empty.
 	RecipientState string
 	// Answers settle what the last suggestion listed in
-	// missing_information: operation_scope, purpose, contains_alcohol,
-	// service_city_code, tax_retained. Omitted when empty.
+	// missing_information: operation_scope, purpose, origin,
+	// contains_alcohol, service_city_code, tax_retained. origin is "resale"
+	// or "own_production" and settles an NF-e's CFOP: x102 for a resold
+	// product, x101 for the company's own production. Omitted when empty.
 	Answers map[string]any
+	// AcceptLanguage is pt-BR, en or es, sent as the Accept-Language header
+	// only. Omitted when empty.
+	AcceptLanguage string
 }
 
 // Classify suggests a fiscal classification for one item's description.
@@ -100,7 +105,7 @@ func (inv *Invoice) Classify(req ClassifyRequest) (map[string]any, error) {
 	if len(req.Answers) > 0 {
 		payload["answers"] = req.Answers
 	}
-	return inv.request(http.MethodPost, "/ai/classify", payload, nil)
+	return inv.request(http.MethodPost, "/ai/classify", payload, nil, WithAcceptLanguage(req.AcceptLanguage))
 }
 
 // Stats counts this company's documents, and the last days of them.

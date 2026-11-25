@@ -46,7 +46,7 @@ func (inv *Invoice) Validate(req IssueRequest) (*ValidationResult, error) {
 	}
 
 	raw, err := inv.send(http.MethodPost, "/invoices/validate", payload, nil,
-		withAcceptLanguage(req.AcceptLanguage))
+		WithAcceptLanguage(req.AcceptLanguage))
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnprocessableEntity {
